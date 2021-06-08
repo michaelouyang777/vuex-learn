@@ -318,12 +318,15 @@ function resetStore (store, hot) {
 }
 
 /**
- * 
+ * 将state和getters存放到一个vue实例中
+ * getters保存在计算属性中，会给getters加一层代理，
+ * 这样可以通过this.$store.getters.xxx访问到
  * @param {*} store 
  * @param {*} state 
  * @param {*} hot 
  */
 function resetStoreVM (store, state, hot) {
+  // 保存旧vm
   const oldVm = store._vm
 
   // bind store public getters
@@ -332,10 +335,12 @@ function resetStoreVM (store, state, hot) {
   store._makeLocalGettersCache = Object.create(null)
   const wrappedGetters = store._wrappedGetters
   const computed = {}
+  // 循环所有getters，通过Object.defineProperty方法为getters对象建立属性，这样就可以通过this.$store.getters.xxx访问
   forEachValue(wrappedGetters, (fn, key) => {
     // use computed to leverage its lazy-caching mechanism
     // direct inline function use will lead to closure preserving oldVm.
     // using partial to return function with only arguments preserved in closure environment.
+    // getter保存在computed中，执行时只需要给上store参数，这个在registerGetter时已经做处理
     computed[key] = partial(fn, store)
     Object.defineProperty(store.getters, key, {
       get: () => store._vm[key],
@@ -346,6 +351,8 @@ function resetStoreVM (store, state, hot) {
   // use a Vue instance to store the state tree
   // suppress warnings just in case the user has added
   // some funky global mixins
+  // 使用一个vue实例来保存state和getter
+  // silent设置为true，取消所有日志警告等
   const silent = Vue.config.silent
   Vue.config.silent = true
   store._vm = new Vue({
@@ -354,13 +361,16 @@ function resetStoreVM (store, state, hot) {
     },
     computed
   })
+  // 恢复用户的silent设置
   Vue.config.silent = silent
 
   // enable strict mode for new vm
+  // strict模式
   if (store.strict) {
     enableStrictMode(store)
   }
 
+  // 若存在oldVm，解除对state的引用，等dom更新后把旧的vue实例销毁
   if (oldVm) {
     if (hot) {
       // dispatch changes in all subscribed watchers
@@ -637,9 +647,15 @@ function registerGetter (store, type, rawGetter, local) {
   }
 }
 
+/**
+ * 使用$watch来观察state的变化，如果此时的store._committing不会true，
+ * 便是在mutation之外修改state，报错。
+ * @param {*} store 
+ */
 function enableStrictMode (store) {
   store._vm.$watch(function () { return this._data.$$state }, () => {
     if (__DEV__) {
+      // 不允许在mutation之外修改state
       assert(store._committing, `do not mutate vuex store state outside mutation handlers.`)
     }
   }, { deep: true, sync: true })
