@@ -34,8 +34,9 @@
   + 【devtool.js】 chrome 的 vue 调试插件中使用到的代码，主要实现数据回滚功能
   + 【logger.js】 日志打印相关
 - 【helpers.js】 辅助函数，mapGetters，mapActions，mapMutations等函数的实现
-- 【index.esm.js】入口文件
+- 【index.cjs.js】入口文件
 - 【index.js】入口文件
+- 【index.mjs】入口文件
 - 【mixin.js】vue 混合函数，实现 vuex 的安装功能
 - 【store.js】vuex 存储类，实现 vuex 的主体功能。
 - 【util.js】工具函数库，复用一些常用函数

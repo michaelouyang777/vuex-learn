@@ -3,6 +3,9 @@ import devtoolPlugin from './plugins/devtool'
 import ModuleCollection from './module/module-collection'
 import { forEachValue, isObject, isPromise, assert, partial } from './util'
 
+// 声明Vue变量
+// 声明了一个Vue变量，这个变量在install方法中会被赋值，
+// 这样可以给当前作用域提供Vue，这样做的好处是不需要额外import Vue from 'vue'
 let Vue // bind on install
 
 export class Store {
@@ -536,7 +539,14 @@ function unifyObjectStyle (type, payload, options) {
   return { type, payload, options }
 }
 
+/**
+ * 1. Vuex的注册
+ *   声明install方法
+ *   传入vue对象，把传入的vue对象赋给
+ * @param {*} _Vue vm对象
+ */
 export function install (_Vue) {
+  // 判断是否已经存在Vue对象，有则返回
   if (Vue && _Vue === Vue) {
     if (__DEV__) {
       console.error(
@@ -545,6 +555,8 @@ export function install (_Vue) {
     }
     return
   }
+  // 赋给全局的Vue变量
   Vue = _Vue
+  // 执行引入mixin方法
   applyMixin(Vue)
 }
