@@ -110,6 +110,7 @@ export class Store {
 
   commit (_type, _payload, _options) {
     // check object-style commit
+    // 统一格式，因为支持对象风格和payload风格
     const {
       type,
       payload,
@@ -117,19 +118,23 @@ export class Store {
     } = unifyObjectStyle(_type, _payload, _options)
 
     const mutation = { type, payload }
+    // 获取当前type对应保存下来的mutations数组
     const entry = this._mutations[type]
     if (!entry) {
+      // 提示不存在该mutation
       if (__DEV__) {
         console.error(`[vuex] unknown mutation type: ${type}`)
       }
       return
     }
+    // 包裹在_withCommit中执行mutation，mutation是修改state的唯一方法
     this._withCommit(() => {
       entry.forEach(function commitIterator (handler) {
+        // 执行mutation，只需要传入payload，在上面的包裹函数中已经处理了其他参数
         handler(payload)
       })
     })
-
+    // 执行mutation的订阅者
     this._subscribers
       .slice() // shallow copy to prevent iterator invalidation if subscriber synchronously calls unsubscribe
       .forEach(sub => sub(mutation, this.state))
@@ -147,13 +152,16 @@ export class Store {
 
   dispatch (_type, _payload) {
     // check object-style dispatch
+    // 统一格式
     const {
       type,
       payload
     } = unifyObjectStyle(_type, _payload)
 
     const action = { type, payload }
+    // 获取actions数组
     const entry = this._actions[type]
+    // 提示不存在action
     if (!entry) {
       if (__DEV__) {
         console.error(`[vuex] unknown action type: ${type}`)
@@ -162,6 +170,7 @@ export class Store {
     }
 
     try {
+      // 执行action的订阅者
       this._actionSubscribers
         .slice() // shallow copy to prevent iterator invalidation if subscriber synchronously calls unsubscribe
         .filter(sub => sub.before)
@@ -173,10 +182,12 @@ export class Store {
       }
     }
 
+    // 如果action大于1，需要用Promise.all包裹
     const result = entry.length > 1
       ? Promise.all(entry.map(handler => handler(payload)))
       : entry[0](payload)
 
+    // 返回一个promise结果
     return new Promise((resolve, reject) => {
       result.then(res => {
         try {
@@ -441,7 +452,7 @@ function installModule (store, rootState, path, module, hot) {
     registerGetter(store, namespacedType, getter, local)
   })
 
-  // 逐一注册子module
+  // 递归注册子module
   module.forEachChild((child, key) => {
     installModule(store, rootState, path.concat(key), child, hot)
   })
@@ -565,13 +576,17 @@ function registerMutation (store, type, handler, local) {
 /**
  * 注册action
  * @param {*} store 
- * @param {*} type 
- * @param {*} handler 
- * @param {*} local 
+ * @param {*} type type（namespace处理后的）
+ * @param {*} handler handler函数
+ * @param {*} local module的上下文
  */
 function registerAction (store, type, handler, local) {
+  // 获取_actions数组，不存在即赋值为空数组
   const entry = store._actions[type] || (store._actions[type] = [])
+  // push到数组中
   entry.push(function wrappedActionHandler (payload) {
+    // 包一层，执行时需要传入payload和cb
+    // 执行action
     let res = handler.call(store, {
       dispatch: local.dispatch,
       commit: local.commit,
@@ -580,10 +595,12 @@ function registerAction (store, type, handler, local) {
       rootGetters: store.getters,
       rootState: store.state
     }, payload)
+    // 如果action的执行结果不是promise，将他包裹为promise，这样就支持promise的链式调用
     if (!isPromise(res)) {
       res = Promise.resolve(res)
     }
     if (store._devtoolHook) {
+      // 使用devtool处理一次error
       return res.catch(err => {
         store._devtoolHook.emit('vuex:error', err)
         throw err
@@ -596,14 +613,20 @@ function registerAction (store, type, handler, local) {
 
 /**
  * 注册getter
+ * @param {*} store 
+ * @param {*} type type（namesapce处理后的）
+ * @param {*} rawGetter getter函数
+ * @param {*} local module上下文
  */
 function registerGetter (store, type, rawGetter, local) {
+  // 不允许重复定义getters
   if (store._wrappedGetters[type]) {
     if (__DEV__) {
       console.error(`[vuex] duplicate getter key: ${type}`)
     }
     return
   }
+  // 包一层，保存到_wrappedGetters中
   store._wrappedGetters[type] = function wrappedGetter (store) {
     return rawGetter(
       local.state, // local state
