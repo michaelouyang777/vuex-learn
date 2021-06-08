@@ -8,16 +8,25 @@ import { forEachValue, isObject, isPromise, assert, partial } from './util'
 // 这样可以给当前作用域提供Vue，这样做的好处是不需要额外import Vue from 'vue'
 let Vue // bind on install
 
+
+/**
+ * 2.store初始化
+ *   Store的构造函数
+ */
 export class Store {
   constructor (options = {}) {
     // Auto install if it is not done yet and `window` has `Vue`.
     // To allow users to avoid auto-installation in some cases,
     // this code should be placed here. See #731
     if (!Vue && typeof window !== 'undefined' && window.Vue) {
+      // 挂载在window上的自动安装，也就是通过script标签引入时不需要手动调用Vue.use(Vuex)
       install(window.Vue)
     }
 
     if (__DEV__) {
+      // 断言必须使用Vue.use(Vuex),在install方法中会给Vue赋值
+      // 断言必须存在Promise
+      // 断言必须使用new操作符
       assert(Vue, `must call Vue.use(Vuex) before creating a store instance.`)
       assert(typeof Promise !== 'undefined', `vuex requires a Promise polyfill in this browser.`)
       assert(this instanceof Store, `store must be called with the new operator.`)
@@ -28,19 +37,32 @@ export class Store {
       strict = false
     } = options
 
-    // store internal state
+    /**
+     * store internal state
+     * _committing：提交状态的标志，在_withCommit中，当使用mutation时，会先赋值为true，再执行mutation，修改state后再赋值为false，在这个过程中，会用watch监听state的变化时是否_committing为true，从而保证只能通过mutation来修改state
+     * _actions：用于保存所有action，里面会先包装一次
+     * _actionSubscribers：用于保存订阅action的回调
+     * _mutations：用于保存所有的mutation，里面会先包装一次
+     * _wrappedGetters：用于保存包装后的getter
+     * _modules：用于保存一棵module树
+     * _modulesNamespaceMap：用于保存namespace的模块
+     */
     this._committing = false
     this._actions = Object.create(null)
     this._actionSubscribers = []
     this._mutations = Object.create(null)
     this._wrappedGetters = Object.create(null)
+    // 用于module收集
     this._modules = new ModuleCollection(options)
     this._modulesNamespaceMap = Object.create(null)
+    // 用于监听mutation
     this._subscribers = []
+    // 用于响应式地监测一个 getter 方法的返回值
     this._watcherVM = new Vue()
     this._makeLocalGettersCache = Object.create(null)
 
     // bind commit and dispatch to self
+    // 将dispatch和commit方法的this指针绑定到store上，防止被修改
     const store = this
     const { dispatch, commit } = this
     this.dispatch = function boundDispatch (type, payload) {
@@ -58,13 +80,16 @@ export class Store {
     // init root module.
     // this also recursively registers all sub-modules
     // and collects all module getters inside this._wrappedGetters
+    // 这里是module处理的核心，包括处理根module、action、mutation、getters和递归注册子module
     installModule(this, state, [], this._modules.root)
 
     // initialize the store vm, which is responsible for the reactivity
     // (also registers _wrappedGetters as computed properties)
+    // 使用vue实例来保存state和getter
     resetStoreVM(this, state)
 
     // apply plugins
+    // 插件注册
     plugins.forEach(plugin => plugin(this))
 
     const useDevtools = options.devtools !== undefined ? options.devtools : Vue.config.devtools
@@ -281,6 +306,12 @@ function resetStore (store, hot) {
   resetStoreVM(store, state, hot)
 }
 
+/**
+ * 
+ * @param {*} store 
+ * @param {*} state 
+ * @param {*} hot 
+ */
 function resetStoreVM (store, state, hot) {
   const oldVm = store._vm
 
@@ -331,21 +362,49 @@ function resetStoreVM (store, state, hot) {
   }
 }
 
+/**
+ * 组装module
+ * @param {*} store 
+ * @param {*} rootState 
+ * @param {*} path 
+ * @param {*} module 
+ * @param {*} hot 
+ */
 function installModule (store, rootState, path, module, hot) {
   const isRoot = !path.length
+  /*
+   * {
+   *   // ...
+   *   modules: {
+   *     moduleA: {
+   *       namespaced: true
+   *     },
+   *     moduleB: {}
+   *   }
+   * }
+   * moduleA的namespace -> 'moduleA/'
+   * moduleB的namespace -> ''
+   */
   const namespace = store._modules.getNamespace(path)
 
   // register in namespace map
+  // 如果有注册命名空间的module
   if (module.namespaced) {
     if (store._modulesNamespaceMap[namespace] && __DEV__) {
       console.error(`[vuex] duplicate namespace ${namespace} for the namespaced module ${path.join('/')}`)
     }
+    // 保存namespaced模块
     store._modulesNamespaceMap[namespace] = module
   }
 
   // set state
+  // 判断是否为根组件且不是hot，得到父级module的state和当前module的name，
+  // 调用Vue.set(parentState, moduleName, module.state)将当前module的state挂载到父state上
   if (!isRoot && !hot) {
+    // 非根组件设置state
+    // 根据path获取父state
     const parentState = getNestedState(rootState, path.slice(0, -1))
+    // 当前的module
     const moduleName = path[path.length - 1]
     store._withCommit(() => {
       if (__DEV__) {
@@ -355,28 +414,34 @@ function installModule (store, rootState, path, module, hot) {
           )
         }
       }
+      // 使用Vue.set将state设置为响应式
       Vue.set(parentState, moduleName, module.state)
     })
   }
 
+  // 设置module的上下文，从而保证mutation和action的第一个参数能拿到对应的state getter等
   const local = module.context = makeLocalContext(store, namespace, path)
 
+  // 逐一注册mutation
   module.forEachMutation((mutation, key) => {
     const namespacedType = namespace + key
     registerMutation(store, namespacedType, mutation, local)
   })
 
+  // 逐一注册action
   module.forEachAction((action, key) => {
     const type = action.root ? key : namespace + key
     const handler = action.handler || action
     registerAction(store, type, handler, local)
   })
 
+  // 逐一注册getter
   module.forEachGetter((getter, key) => {
     const namespacedType = namespace + key
     registerGetter(store, namespacedType, getter, local)
   })
 
+  // 逐一注册子module
   module.forEachChild((child, key) => {
     installModule(store, rootState, path.concat(key), child, hot)
   })
@@ -386,50 +451,60 @@ function installModule (store, rootState, path, module, hot) {
  * make localized dispatch, commit, getters and state
  * if there is no namespace, just use root ones
  */
+// 设置module的上下文，绑定对应的dispatch、commit、getters、state
 function makeLocalContext (store, namespace, path) {
+  // namespace 如'moduleA/'
   const noNamespace = namespace === ''
 
   const local = {
+    // 如果没有namespace，直接使用原来的
     dispatch: noNamespace ? store.dispatch : (_type, _payload, _options) => {
+      // 统一格式 因为支持payload风格和对象风格
       const args = unifyObjectStyle(_type, _payload, _options)
       const { payload, options } = args
       let { type } = args
-
+      // 如果root: true 不会加上namespace 即在命名空间模块里提交根的 action
       if (!options || !options.root) {
+        // 加上命名空间
         type = namespace + type
         if (__DEV__ && !store._actions[type]) {
           console.error(`[vuex] unknown local action type: ${args.type}, global type: ${type}`)
           return
         }
       }
-
+      // 触发action
       return store.dispatch(type, payload)
     },
 
+    // 如果没有namespace，直接使用原来的
     commit: noNamespace ? store.commit : (_type, _payload, _options) => {
+      // 统一格式 因为支持payload风格和对象风格
       const args = unifyObjectStyle(_type, _payload, _options)
       const { payload, options } = args
       let { type } = args
-
+      // 如果root: true 不会加上namespace 即在命名空间模块里提交根的 mutation
       if (!options || !options.root) {
+        // 加上命名空间
         type = namespace + type
         if (__DEV__ && !store._mutations[type]) {
           console.error(`[vuex] unknown local mutation type: ${args.type}, global type: ${type}`)
           return
         }
       }
-
+      // 触发mutation
       store.commit(type, payload, options)
     }
   }
 
   // getters and state object must be gotten lazily
   // because they will be changed by vm update
+  // 这里的getters和state需要延迟处理，需要等数据更新后才进行计算，
+  // 所以使用Object.defineProperties的getter函数，当访问的时候再进行一次计算
   Object.defineProperties(local, {
     getters: {
       get: noNamespace
         ? () => store.getters
-        : () => makeLocalGetters(store, namespace)
+        : () => makeLocalGetters(store, namespace) // 获取namespace下的getters
     },
     state: {
       get: () => getNestedState(store.state, path)
@@ -445,14 +520,18 @@ function makeLocalGetters (store, namespace) {
     const splitPos = namespace.length
     Object.keys(store.getters).forEach(type => {
       // skip if the target getter is not match this namespace
+      // 如果getter不在该命名空间下 直接return
       if (type.slice(0, splitPos) !== namespace) return
 
       // extract local getter type
+      // 去掉type上的命名空间
       const localType = type.slice(splitPos)
 
       // Add a port to the getters proxy.
       // Define as getter property because
       // we do not want to evaluate the getters in this time.
+      // 给getters加一层代理 这样在module中获取到的getters不会带命名空间，
+      // 实际返回的是store.getters[type] type是有命名空间的
       Object.defineProperty(gettersProxy, localType, {
         get: () => store.getters[type],
         enumerable: true
@@ -464,13 +543,32 @@ function makeLocalGetters (store, namespace) {
   return store._makeLocalGettersCache[namespace]
 }
 
+/**
+ * 注册mutation
+ *   mutation的注册主要是包一层函数，然后保存到store._mutations里面
+ * @param {*} store 
+ * @param {*} type mutation的key（namespace处理后的）
+ * @param {*} handler handler函数
+ * @param {*} local module的上下文
+ */
 function registerMutation (store, type, handler, local) {
+  // 首先判断store._mutations是否存在，否则给空数组
   const entry = store._mutations[type] || (store._mutations[type] = [])
+  // 将mutation包一层函数，push到数组中
   entry.push(function wrappedMutationHandler (payload) {
+    // 包一层，commit执行时只需要传入payload
+    // 执行时让this指向store，参数为当前module上下文的state和用户额外添加的payload
     handler.call(store, local.state, payload)
   })
 }
 
+/**
+ * 注册action
+ * @param {*} store 
+ * @param {*} type 
+ * @param {*} handler 
+ * @param {*} local 
+ */
 function registerAction (store, type, handler, local) {
   const entry = store._actions[type] || (store._actions[type] = [])
   entry.push(function wrappedActionHandler (payload) {
@@ -496,6 +594,9 @@ function registerAction (store, type, handler, local) {
   })
 }
 
+/**
+ * 注册getter
+ */
 function registerGetter (store, type, rawGetter, local) {
   if (store._wrappedGetters[type]) {
     if (__DEV__) {
