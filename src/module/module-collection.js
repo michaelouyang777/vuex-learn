@@ -91,14 +91,20 @@ export default class ModuleCollection {
     parent.removeChild(key)
   }
 
+  /**
+   * 是否注册
+   * @param {*} path 
+   */
   isRegistered (path) {
     const parent = this.get(path.slice(0, -1))
     const key = path[path.length - 1]
 
+    // 如果存在返回true
     if (parent) {
       return parent.hasChild(key)
     }
 
+    // 否则返回false
     return false
   }
 }

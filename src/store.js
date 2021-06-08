@@ -226,20 +226,38 @@ export class Store {
     return genericSubscribe(subs, this._actionSubscribers, options)
   }
 
+  /**
+   * 用于监听一个getter值的变化
+   * @param {*} getter 被监听的getter
+   * @param {*} cb 回调
+   * @param {*} options 配置
+   */
   watch (getter, cb, options) {
     if (__DEV__) {
       assert(typeof getter === 'function', `store.watch only accepts a function.`)
     }
+    // 使用$watch方法来监控getter的变化，传入state和getters作为参数，当值变化时会执行cb回调。调用此方法返回的函数可停止侦听。
     return this._watcherVM.$watch(() => getter(this.state, this.getters), cb, options)
   }
 
+  /**
+   * 替换state
+   * @param {*} state 
+   */
   replaceState (state) {
     this._withCommit(() => {
       this._vm._data.$$state = state
     })
   }
 
+  /**
+   * 用于动态注册module
+   * @param {*} path path只接受String和Array类型
+   * @param {*} rawModule 
+   * @param {*} options 
+   */
   registerModule (path, rawModule, options = {}) {
+    // 如果path是字符串，则使用数组存放 -- 统一path的格式为Array
     if (typeof path === 'string') path = [path]
 
     if (__DEV__) {
@@ -247,28 +265,44 @@ export class Store {
       assert(path.length > 0, 'cannot register the root module by using registerModule.')
     }
 
+    // 收集module
     this._modules.register(path, rawModule)
+    // 组装module
     installModule(this, this.state, path, this._modules.get(path), options.preserveState)
     // reset store to update getters...
+    // 更新vm
     resetStoreVM(this, this.state)
   }
 
+  /**
+   * 根据path注销module
+   * @param {*} path path只接受String和Array类型
+   */
   unregisterModule (path) {
+    // 如果path是字符串，则使用数组存放 -- 统一path的格式为Array
     if (typeof path === 'string') path = [path]
 
     if (__DEV__) {
       assert(Array.isArray(path), `module path must be a string or an Array.`)
     }
 
+    // 注销module
     this._modules.unregister(path)
+    // 该module的state通过Vue.delete移除
     this._withCommit(() => {
       const parentState = getNestedState(this.state, path.slice(0, -1))
       Vue.delete(parentState, path[path.length - 1])
     })
+    // 重置store
     resetStore(this)
   }
 
+  /**
+   * 是否存在该module
+   * @param {*} path 
+   */
   hasModule (path) {
+    // 如果path是字符串，则用数组包裹 -- 统一path为数组格式
     if (typeof path === 'string') path = [path]
 
     if (__DEV__) {
@@ -283,7 +317,11 @@ export class Store {
     resetStore(this, true)
   }
 
+  /**
+   * 用于执行mutation
+   */
   _withCommit (fn) {
+    // 在执行mutation的时候，会将_committing设置为true，执行完毕后重置
     const committing = this._committing
     this._committing = true
     fn()
@@ -305,15 +343,24 @@ function genericSubscribe (fn, subs, options) {
   }
 }
 
+/**
+ * 重置store
+ * @param {*} store 
+ * @param {*} hot 
+ */
 function resetStore (store, hot) {
+  store._wrappedGetters = Object.create(null)
+  // 将_actions、_mutations、_wrappedGetters、_modulesNamespaceMap置空
   store._actions = Object.create(null)
   store._mutations = Object.create(null)
   store._wrappedGetters = Object.create(null)
   store._modulesNamespaceMap = Object.create(null)
   const state = store.state
   // init all modules
+  // 重新进行全部模块安装
   installModule(store, state, [], store._modules.root, true)
   // reset vm
+  // 更新vm
   resetStoreVM(store, state, hot)
 }
 
