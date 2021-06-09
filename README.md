@@ -98,6 +98,7 @@ export default new Vuex.Store()
 ```js
 // main.js
 // 在Vue主入口文件中，引入store到装载到vue options上
+
 import Vue from 'vue'
 import App from './../pages/app.vue'
 import store from './store.js'
@@ -141,6 +142,9 @@ store.js内定义局部 Vue 变量，用于判断是否已经装载和减少全�
 // 这样可以给当前作用域提供Vue，这样做的好处是不需要额外import Vue from 'vue'
 let Vue
 
+// ...
+// ...
+// ...
 
 // 若是首次加载，将局部Vue变量赋值为全局的Vue对象，并执行applyMixin方法
 export function install (_Vue) {
@@ -165,6 +169,7 @@ export function install (_Vue) {
 执行install会先判断Vue是否已经被赋值，避免二次安装。然后调用`applyMixin`方法，代码如下：
 
 ```js
+// mixin.js
 // applyMixin
 export default function (Vue) {
   // 获取Vue对象内的版本信息
@@ -219,10 +224,10 @@ export default function (Vue) {
 看个图例理解下store的传递。
 
 页面Vue结构图：
-![component-tree](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/component-tree.jpeg)
+![component-tree](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/component-tree.jpg)
 
 对应store流向：
-![store-flow](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/store-flow.jpeg)
+![store-flow](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/store-flow.jpg)
 
 
 
@@ -264,23 +269,32 @@ new Vue({
 })
 ```
 
-这里是调用Store构造函数，传入一个对象，包括state、actions等等，接下去看看Store构造函数都做了些什么
+这里是调用Store构造函数，传入一个对象，包括state、actions等等，接下去看看Store构造函数都做了些什么。
+
+先看下构造方法的整体逻辑流程来帮助后面的理解：
+
+![store-constructor](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/store-constructor.jpg)
 
 ```js
+// store.js
+
 export class Store {
   constructor (options = {}) {
+    /************************
+     * 环境判断          
+     ************************/
     if (!Vue && typeof window !== 'undefined' && window.Vue) {
       // 挂载在window上的自动安装，也就是通过script标签引入时不需要手动调用Vue.use(Vuex)
       install(window.Vue)
     }
 
-    if (process.env.NODE_ENV !== 'production') {
+    if (__DEV__) {
       // 断言必须使用Vue.use(Vuex),在install方法中会给Vue赋值
       // 断言必须存在Promise
       // 断言必须使用new操作符
       assert(Vue, `must call Vue.use(Vuex) before creating a store instance.`)
       assert(typeof Promise !== 'undefined', `vuex requires a Promise polyfill in this browser.`)
-      assert(this instanceof Store, `Store must be called with the new operator.`)
+      assert(this instanceof Store, `store must be called with the new operator.`)
     }
 
     const {
@@ -288,13 +302,25 @@ export class Store {
       strict = false
     } = options
 
-    // store internal state
+
+    /************************
+     * 初始变量设置          
+     ************************/
+    // _committing：提交状态的标志，在_withCommit中，当使用mutation时，会先赋值为true，再执行mutation，修改state后再赋值为false，在这个过程中，会用watch监听state的变化时是否_committing为true，从而保证只能通过mutation来修改state
     this._committing = false
+    // _actions：用于保存所有action，里面会先包装一次
     this._actions = Object.create(null)
+    // _actionSubscribers：用于保存订阅action的回调
     this._actionSubscribers = []
+    // _mutations：用于保存所有的mutation，里面会先包装一次
     this._mutations = Object.create(null)
+    // _wrappedGetters：用于保存包装后的getter
     this._wrappedGetters = Object.create(null)
-    // 这里进行module收集，只处理了state
+
+
+    /************************
+     * moduel树构造
+     ************************/
     this._modules = new ModuleCollection(options)
     // 用于保存namespaced的模块
     this._modulesNamespaceMap = Object.create(null)
@@ -302,8 +328,12 @@ export class Store {
     this._subscribers = []
     // 用于响应式地监测一个 getter 方法的返回值
     this._watcherVM = new Vue()
+    this._makeLocalGettersCache = Object.create(null)
 
-    // 将dispatch和commit方法的this指针绑定到store上，防止被修改
+
+    /************************
+     * 将dispatch和commit方法的this指针绑定到store上，防止被修改
+     ************************/
     const store = this
     const { dispatch, commit } = this
     this.dispatch = function boundDispatch (type, payload) {
@@ -315,16 +345,26 @@ export class Store {
 
     // strict mode
     this.strict = strict
-
     const state = this._modules.root.state
 
+
+    /************************
+     * 组装module
+     ************************/
     // 这里是module处理的核心，包括处理根module、action、mutation、getters和递归注册子module
     installModule(this, state, [], this._modules.root)
 
+
+    /************************
+     * 更新store
+     ************************/
     // 使用vue实例来保存state和getter
     resetStoreVM(this, state)
 
-    // 插件注册
+    
+    /************************
+     * 插件注册
+     ************************/
     plugins.forEach(plugin => plugin(this))
 
     if (Vue.config.devtools) {
@@ -334,29 +374,106 @@ export class Store {
 }
 ```
 
-首先会判断Vue是不是挂载在`window`上，如果是的话，自动调用`install`方法，然后进行断言，必须先调用Vue.use(Vuex)。必须提供`Promise`，这里应该是为了让Vuex的体积更小，让开发者自行提供`Promise`的`polyfill`，一般我们可以使用`babel-runtime`引入。最后断言必须使用new操作符调用Store函数。
 
-接下去是一些内部变量的初始化
-`_committing`提交状态的标志，在_withCommit中，当使用`mutation`时，会先赋值为`true`，再执行`mutation`，修改`state`后再赋值为`false`，在这个过程中，会用`watch`实时监听state的变化时是否`_committing`为true，从而保证只能通过`mutation`来修改`state`
-`_actions`用于保存所有action，里面会先包装一次
-`_actionSubscribers`用于保存订阅action的回调
-`_mutations`用于保存所有的mutation，里面会先包装一次
-`_wrappedGetters`用于保存包装后的getter
-`_modules`用于保存一棵module树
-`_modulesNamespaceMap`用于保存namespaced的模块
+##### 2-1. 环境判断
 
-接下去的重点是
+开始分析store的构造函数，分小节逐函数逐行的分析其功能。
+
+```js
+// store.js
+
+constructor (options = {}) {
+
+  if (!Vue && typeof window !== 'undefined' && window.Vue) {
+    // 挂载在window上的自动安装，也就是通过script标签引入时不需要手动调用Vue.use(Vuex)
+    install(window.Vue)
+  }
+
+  if (__DEV__) {
+    // 断言必须使用Vue.use(Vuex),在install方法中会给Vue赋值
+    // 断言必须存在Promise
+    // 断言必须使用new操作符
+    assert(Vue, `must call Vue.use(Vuex) before creating a store instance.`)
+    assert(typeof Promise !== 'undefined', `vuex requires a Promise polyfill in this browser.`)
+    assert(this instanceof Store, `store must be called with the new operator.`)
+  }
+}
+```
+
+在store构造函数中执行环境判断，判断Vue是不是挂载在`window`上，如果是的话，自动调用`install`方法。
+
+然后进行断言，其中包含：
+1. 必须先调用Vue.use(Vuex)进行装载；
+2. 支持Promise语法。必须提供`Promise`，让开发者自行提供`Promise`的`polyfill`，一般我们可以使用`babel-runtime`引入。
+3. 是否Store的实例。最后断言必须使用new操作符调用Store函数。
+
+> NOTE：assert函数是一个简单的断言函数的实现，一行代码即可实现。
+
+```js
+/**
+ * 判断是否存在对象，没有则抛出error
+ * @param {*} condition 
+ * @param {*} msg 
+ */
+export function assert (condition, msg) {
+  if (!condition) throw new Error(`[vuex] ${msg}`)
+}
+```
+
+
+
+##### 2-2. 数据初始化
+
+环境判断后，初始化内部数据，并根据new Vuex.store(options) 时传入的options对象，收集modules。
+
+1. `_committing`：提交状态的标志，在_withCommit中，当使用`mutation`时，会先赋值为`true`，再执行`mutation`，修改`state`后再赋值为`false`，在这个过程中，会用`watch`实时监听state的变化时是否`_committing`为true，从而保证只能通过`mutation`来修改`state`
+2. `_actions`：用于保存所有action，里面会先包装一次
+3. `_actionSubscribers`：用于保存订阅action的回调
+4. `_mutations`：用于保存所有的mutation，里面会先包装一次
+5. `_wrappedGetters`：用于保存包装后的getter
+6. `_modules`：用于保存一棵module树
+7. `_modulesNamespaceMap`：用于保存namespaced的模块
+8. `_subscribers`：订阅函数集合，Vuex提供了subscribe功能
+9. `_watcherVM`： Vue组件用于watch监视变化
+10. `_makeLocalGettersCache`: 用于保存本地getters缓存
+
+```js
+// store.js
+const {
+  plugins = [],
+  strict = false
+} = options
+
+// store internal state
+this._committing = false // 是否在进行提交状态标识
+this._actions = Object.create(null) // acitons操作对象
+this._actionSubscribers = [] // _actionSubscribers：用于保存订阅action的回调
+this._mutations = Object.create(null) // mutations操作对象
+this._wrappedGetters = Object.create(null) // 封装后的getters集合对象
+this._modules = new ModuleCollection(options) // Vuex支持store分模块传入，存储分析后的modules
+this._modulesNamespaceMap = Object.create(null) // 模块命名空间map
+this._subscribers = [] // 订阅函数集合，Vuex提供了subscribe功能
+this._watcherVM = new Vue() // Vue组件用于watch监视变化
+this._makeLocalGettersCache = Object.create(null) // 用于保存本地getters缓存
+```
+
+
+
+##### 2-3 .module树构造（模块收集）
+
+接下的是重点
+
+调用 new Vuex.store(options) 时传入的options对象，用于构造ModuleCollection类。
 
 ```js
 this._modules = new ModuleCollection(options)
 ```
 
-##### 2.1 模块收集
-
-接下去看看ModuleCollection函数都做了什么，部分代码如下
+看看ModuleCollection类都做了什么，部分代码如下：
 
 ```js
 // module-collection.js
+
 export default class ModuleCollection {
   constructor (rawRootModule) {
     // 注册 root module (Vuex.Store options)
@@ -383,7 +500,7 @@ export default class ModuleCollection {
    * 根模块的path => []
    */
   register (path, rawModule, runtime = true) {
-    if (process.env.NODE_ENV !== 'production') {
+    if (__DEV__) {
       // 断言 rawModule中的getters、actions、mutations必须为指定的类型
       assertRawModule(path, rawModule)
     }
@@ -394,11 +511,12 @@ export default class ModuleCollection {
       // 根module 绑定到root属性上
       this.root = newModule
     } else {
-      // 子module 添加到其父module的_children属性上
+      // 子module 添加其父module的_children属性上
       const parent = this.get(path.slice(0, -1))
       parent.addChild(path[path.length - 1], newModule)
     }
 
+    // register nested modules
     // 如果当前模块存在子模块（modules字段）
     // 遍历子模块，逐个注册，最终形成一个树
     if (rawModule.modules) {
@@ -406,9 +524,11 @@ export default class ModuleCollection {
         this.register(path.concat(key), rawChildModule, runtime)
       })
     }
-  }
+  } 
 }
+```
 
+```js
 // module.js
 export default class Module {
   constructor (rawModule, runtime) {
@@ -434,33 +554,190 @@ export default class Module {
 }
 ```
 
-这里调用`ModuleCollection`构造函数，通过`path`的长度判断是否为根module，首先进行根module的注册，然后递归遍历所有的module，子module 添加其父module的_children属性上，最终形成一棵树
+调用`new ModuleCollection(options)`，将options对象传入，主要执行的是调用 `this.register([], rawRootModule, false)` 的逻辑。`register`实例方法逻辑步骤如下：
+1. 首先实例化一个module对象。
+2. 通过`path`的长度判断是否为根module。
+3. 如果是根module，挂载到root中。
+4. 如果不是根module（即子module），子module添加其父module的_children属性上。
+5. 再判断当前module是否存在子module，递归遍历所有的module，并调用 `this.register(path.concat(key), rawChildModule, runtime)` 对module进行注册。
+6. 最终options对象被构造成一个完整的组件树。
 
-![module-collection](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/module-collection.jpeg)
+![ModuleCollection](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/module-collection.jpg)
 
-接着，还是一些变量的初始化，然后
 
-##### 2.2 绑定commit和dispatch的this指针
+
+##### 2-4. dispatch与commit设置（绑定commit和dispatch的this指针）
+
+继续回到store的构造函数代码。
 
 ```js
-// 绑定commit和dispatch的this指针
+// store.js
+
+// bind commit and dispatch to self
 const store = this
 const { dispatch, commit } = this
+
 this.dispatch = function boundDispatch (type, payload) {
   return dispatch.call(store, type, payload)
 }
+
 this.commit = function boundCommit (type, payload, options) {
   return commit.call(store, type, payload, options)
 }
 ```
 
-这里会将dispath和commit方法的this指针绑定为store，比如下面这样的骚操作，也不会影响到程序的运行
+封装替换原型中的dispatch和commit方法，将this指向当前store对象。
 
+比如下面这样的骚操作，也不会影响到程序的运行：
 ```js
 this.$store.dispatch.call(this, 'someAction', payload)
 ```
 
-##### 2.3 模块安装
+dispatch和commit方法具体实现如下：
+
+```js
+  dispatch (_type, _payload) {
+    // check object-style dispatch
+    // 统一格式
+    const {
+      type,
+      payload
+    } = unifyObjectStyle(_type, _payload) // 配置参数处理
+
+    const action = { type, payload }
+    // 当前type下所有action处理函数集合
+    const entry = this._actions[type]
+    // 提示不存在action
+    if (!entry) {
+      if (__DEV__) {
+        console.error(`[vuex] unknown action type: ${type}`)
+      }
+      return
+    }
+
+    try {
+      // 执行action的订阅者
+      this._actionSubscribers
+        .slice() // shallow copy to prevent iterator invalidation if subscriber synchronously calls unsubscribe
+        .filter(sub => sub.before)
+        .forEach(sub => sub.before(action, this.state))
+    } catch (e) {
+      if (__DEV__) {
+        console.warn(`[vuex] error in before action subscribers: `)
+        console.error(e)
+      }
+    }
+
+    // 如果action大于1，需要用Promise.all包裹
+    const result = entry.length > 1
+      ? Promise.all(entry.map(handler => handler(payload)))
+      : entry[0](payload)
+
+    // 返回一个promise结果
+    return new Promise((resolve, reject) => {
+      result.then(res => {
+        try {
+          this._actionSubscribers
+            .filter(sub => sub.after)
+            .forEach(sub => sub.after(action, this.state))
+        } catch (e) {
+          if (__DEV__) {
+            console.warn(`[vuex] error in after action subscribers: `)
+            console.error(e)
+          }
+        }
+        resolve(res)
+      }, error => {
+        try {
+          this._actionSubscribers
+            .filter(sub => sub.error)
+            .forEach(sub => sub.error(action, this.state, error))
+        } catch (e) {
+          if (__DEV__) {
+            console.warn(`[vuex] error in error action subscribers: `)
+            console.error(e)
+          }
+        }
+        reject(error)
+      })
+    })
+  }
+```
+
+前面提到，dispatch的功能是触发并传递一些参数（payload）给对应type的action。因为其支持2种调用方法，所以在dispatch中，先进行参数的适配处理，然后判断action type是否存在，若存在就逐个执行（注：上面代码中的this._actions[type] 以及 下面的 this._mutations[type] 均是处理过的函数集合，具体内容留到后面进行分析）。
+
+commit方法和dispatch相比虽然都是触发type，但是对应的处理却相对复杂，代码如下。
+
+```js
+  commit (_type, _payload, _options) {
+    // check object-style commit
+    // 统一格式，因为支持对象风格和payload风格
+    const {
+      type,
+      payload,
+      options
+    } = unifyObjectStyle(_type, _payload, _options)
+
+    const mutation = { type, payload }
+    // 获取当前type对应保存下来的mutations数组
+    const entry = this._mutations[type]
+    if (!entry) {
+      // 提示不存在该mutation
+      if (__DEV__) {
+        console.error(`[vuex] unknown mutation type: ${type}`)
+      }
+      return
+    }
+    // 包裹在_withCommit中执行mutation，mutation是修改state的唯一方法
+    this._withCommit(() => {
+      entry.forEach(function commitIterator (handler) {
+        handler(payload)
+      })
+    })
+    // 订阅者函数遍历执行，传入当前的mutation对象和当前的state
+    this._subscribers
+      .slice() // shallow copy to prevent iterator invalidation if subscriber synchronously calls unsubscribe
+      .forEach(sub => sub(mutation, this.state))
+
+    if (
+      __DEV__ &&
+      options && options.silent
+    ) {
+      console.warn(
+        `[vuex] mutation type: ${type}. Silent option has been removed. ` +
+        'Use the filter functionality in the vue-devtools'
+      )
+    }
+  }
+```
+
+该方法同样支持2种调用方法。先进行参数适配，判断触发mutation type，利用_withCommit方法执行本次批量触发mutation处理函数，并传入payload参数。执行完成后，通知所有_subscribers（订阅函数）本次操作的mutation对象以及当前的state状态，如果传入了已经移除的silent选项则进行提示警告。
+
+
+
+###### state修改方法
+_withCommit是一个代理方法，所有触发mutation的进行state修改的操作都经过它，由此来统一管理监控state状态的修改。实现代码如下：
+```js
+_withCommit (fn) {
+  // 保存之前的提交状态
+  const committing = this._committing
+    
+  // 进行本次提交，若不设置为true，直接修改state，strict模式下，Vuex将会产生非法修改state的警告
+  this._committing = true
+    
+  // 执行state的修改操作
+  fn()
+    
+  // 修改完成，还原本次修改之前的状态
+  this._committing = committing
+}
+```
+
+缓存执行时的committing状态将当前状态设置为true后进行本次提交操作，待操作完毕后，将committing状态还原为之前的状态。
+
+
+
+##### 2-5. 模块安装
 
 接着是store的核心代码
 
@@ -805,7 +1082,7 @@ function registerGetter (store, type, rawGetter, local) {
 installModule(store, rootState, path.concat(key), child, hot)
 ```
 
-##### 使用vue实例保存state和getter
+##### 2-6. 使用vue实例保存state和getter
 
 接着再继续执行`resetStoreVM(this, state)`，将`state`和`getters`存放到一个`vue实例`中，
 
@@ -893,7 +1170,7 @@ function enableStrictMode (store) {
 
 再次回到构造函数，接下来是各类插件的注册
 
-##### 2.4 插件注册
+##### 2-7. 插件注册
 
 ```js
 // apply plugins
@@ -906,11 +1183,52 @@ if (Vue.config.devtools) {
 
 到这里`store`的初始化工作已经完成。大概长这个样子
 
-![store](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-store.jpeg)
+![store](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-store.jpg)
 
 看到这里，相信已经对`store`的一些实现细节有所了解，另外`store`上还存在一些api，但是用到的比较少，可以简单看看都有些啥
 
-##### 2.5 其他api
+
+##### 插件
+
+`Vuex`中可以传入`plguins`选项来安装各种插件，这些插件都是函数，接受`store`作为参数，`Vuex`中内置了`devtool`和`logger`两个插件，
+```js
+// 插件注册，所有插件都是一个函数，接受store作为参数
+plugins.forEach(plugin => plugin(this))
+
+// 如果开启devtools，注册devtool
+if (Vue.config.devtools) {
+  devtoolPlugin(this)
+}
+```
+
+```js
+// devtools.js
+const devtoolHook =
+  typeof window !== 'undefined' &&
+  window.__VUE_DEVTOOLS_GLOBAL_HOOK__
+
+export default function devtoolPlugin (store) {
+  if (!devtoolHook) return
+
+  store._devtoolHook = devtoolHook
+
+  // 触发vuex:init
+  devtoolHook.emit('vuex:init', store)
+
+  // 时空穿梭功能
+  devtoolHook.on('vuex:travel-to-state', targetState => {
+    store.replaceState(targetState)
+  })
+
+  // 订阅mutation，当触发mutation时触发vuex:mutation方法，传入mutation和state
+  store.subscribe((mutation, state) => {
+    devtoolHook.emit('vuex:mutation', mutation, state)
+  })
+}
+```
+
+
+#### 3. 其他api
 
 - watch (getter, cb, options)
 
@@ -1032,11 +1350,11 @@ _withCommit (fn) {
 
 在执行`mutation`的时候，会将`_committing`设置为true，执行完毕后重置，在开启`strict`模式时，会监听`state`的变化，当变化时`_committing`不为true时会给出警告
 
-#### 3. 辅助函数
+#### 4. 辅助函数
 
 为了避免每次都需要通过`this.$store`来调用api，`vuex`提供了`mapState` `mapMutations` `mapGetters` `mapActions` `createNamespacedHelpers` 等api，接着看看各api的具体实现，存放在`src/helpers.js`
 
-##### 3.1 一些工具函数
+##### 4.1 一些工具函数
 
 下面这些工具函数是辅助函数内部会用到的，可以先看看功能和实现，主要做的工作是数据格式的统一、和通过`namespace`获取`module`
 
@@ -1087,7 +1405,7 @@ function getModuleByNamespace (store, helper, namespace) {
 }
 ```
 
-##### 3.2 mapState
+##### 4.2 mapState
 
 为组件创建计算属性以返回 `store` 中的状态
 
@@ -1149,7 +1467,7 @@ export default {
 }
 ```
 
-##### 3.4 mapGetters
+##### 4.3 mapGetters
 
 将`store` 中的 `getter` 映射到局部计算属性中
 
@@ -1178,7 +1496,7 @@ export const mapGetters = normalizeNamespace((namespace, getters) => {
 
 同样的处理方式，遍历`getters`，只是这里需要加上命名空间，这是因为在注册时`_wrapGetters`中的`getters`是有加上命名空间的
 
-##### 3.4 mapMutations
+##### 4.4 mapMutations
 
 创建组件方法提交 `mutation`
 
@@ -1209,7 +1527,7 @@ export const mapMutations = normalizeNamespace((namespace, mutations) => {
 
 和上面都是一样的处理方式，这里在判断是否存在`namespace`后，`commit`是不一样的，上面可以知道每个`module`都是保存了上下文的，这里如果存在`namespace`就需要使用那个另外处理的`commit`等信息，另外需要注意的是，这里不需要加上`namespace`，这是因为在`module.context.commit`中会进行处理，忘记的可以往上翻，看`makeLocalContext`对`commit`的处理
 
-##### 3.5 mapAction
+##### 4.5 mapAction
 
 创建组件方法分发 action
 
@@ -1238,41 +1556,3 @@ export const mapActions = normalizeNamespace((namespace, actions) => {
 
 和`mapMutations`基本一样的处理方式
 
-#### 4. 插件
-
-`Vuex`中可以传入`plguins`选项来安装各种插件，这些插件都是函数，接受`store`作为参数，`Vuex`中内置了`devtool`和`logger`两个插件，
-```js
-// 插件注册，所有插件都是一个函数，接受store作为参数
-plugins.forEach(plugin => plugin(this))
-
-// 如果开启devtools，注册devtool
-if (Vue.config.devtools) {
-  devtoolPlugin(this)
-}
-```
-
-```js
-// devtools.js
-const devtoolHook =
-  typeof window !== 'undefined' &&
-  window.__VUE_DEVTOOLS_GLOBAL_HOOK__
-
-export default function devtoolPlugin (store) {
-  if (!devtoolHook) return
-
-  store._devtoolHook = devtoolHook
-
-  // 触发vuex:init
-  devtoolHook.emit('vuex:init', store)
-
-  // 时空穿梭功能
-  devtoolHook.on('vuex:travel-to-state', targetState => {
-    store.replaceState(targetState)
-  })
-
-  // 订阅mutation，当触发mutation时触发vuex:mutation方法，传入mutation和state
-  store.subscribe((mutation, state) => {
-    devtoolHook.emit('vuex:mutation', mutation, state)
-  })
-}
-```

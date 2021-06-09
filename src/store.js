@@ -10,11 +10,14 @@ let Vue // bind on install
 
 
 /**
- * 2.store初始化
+ * 2. store初始化
  *   Store的构造函数
  */
 export class Store {
   constructor (options = {}) {
+    /************************
+     * 环境判断          
+     ************************/
     // Auto install if it is not done yet and `window` has `Vue`.
     // To allow users to avoid auto-installation in some cases,
     // this code should be placed here. See #731
@@ -32,37 +35,45 @@ export class Store {
       assert(this instanceof Store, `store must be called with the new operator.`)
     }
 
+
+    /************************
+     * 初始变量设置          
+     ************************/
     const {
       plugins = [],
       strict = false
     } = options
-
-    /**
-     * store internal state
-     * _committing：提交状态的标志，在_withCommit中，当使用mutation时，会先赋值为true，再执行mutation，修改state后再赋值为false，在这个过程中，会用watch监听state的变化时是否_committing为true，从而保证只能通过mutation来修改state
-     * _actions：用于保存所有action，里面会先包装一次
-     * _actionSubscribers：用于保存订阅action的回调
-     * _mutations：用于保存所有的mutation，里面会先包装一次
-     * _wrappedGetters：用于保存包装后的getter
-     * _modules：用于保存一棵module树
-     * _modulesNamespaceMap：用于保存namespace的模块
-     */
+   
+    // _committing：提交状态的标志，在_withCommit中，当使用mutation时，会先赋值为true，再执行mutation，修改state后再赋值为false，在这个过程中，会用watch监听state的变化时是否_committing为true，从而保证只能通过mutation来修改state
     this._committing = false
+    // _actions：用于保存所有action，里面会先包装一次
     this._actions = Object.create(null)
+    // _actionSubscribers：用于保存订阅action的回调
     this._actionSubscribers = []
+    // _mutations：用于保存所有的mutation，里面会先包装一次
     this._mutations = Object.create(null)
+    // _wrappedGetters：用于保存包装后的getter
     this._wrappedGetters = Object.create(null)
+
+
+    /************************
+     * moduel树构造
+     ************************/
     // 用于module收集
     this._modules = new ModuleCollection(options)
+    // 用于保存namespaced的模块
     this._modulesNamespaceMap = Object.create(null)
     // 用于监听mutation
     this._subscribers = []
     // 用于响应式地监测一个 getter 方法的返回值
     this._watcherVM = new Vue()
+    // 用于保存本地getters缓存
     this._makeLocalGettersCache = Object.create(null)
 
-    // bind commit and dispatch to self
-    // 将dispatch和commit方法的this指针绑定到store上，防止被修改
+
+    /************************
+     * 将dispatch和commit方法的this指针绑定到store上，防止被修改
+     ************************/
     const store = this
     const { dispatch, commit } = this
     this.dispatch = function boundDispatch (type, payload) {
@@ -74,22 +85,31 @@ export class Store {
 
     // strict mode
     this.strict = strict
-
     const state = this._modules.root.state
 
+
+    /************************
+     * 组装module
+     ************************/
     // init root module.
     // this also recursively registers all sub-modules
     // and collects all module getters inside this._wrappedGetters
     // 这里是module处理的核心，包括处理根module、action、mutation、getters和递归注册子module
     installModule(this, state, [], this._modules.root)
 
+
+    /************************
+     * 更新store
+     ************************/
     // initialize the store vm, which is responsible for the reactivity
     // (also registers _wrappedGetters as computed properties)
     // 使用vue实例来保存state和getter
     resetStoreVM(this, state)
 
-    // apply plugins
-    // 插件注册
+
+    /************************
+     * 插件注册
+     ************************/
     plugins.forEach(plugin => plugin(this))
 
     // 如果开启devtools，注册devtool
@@ -131,11 +151,10 @@ export class Store {
     // 包裹在_withCommit中执行mutation，mutation是修改state的唯一方法
     this._withCommit(() => {
       entry.forEach(function commitIterator (handler) {
-        // 执行mutation，只需要传入payload，在上面的包裹函数中已经处理了其他参数
         handler(payload)
       })
     })
-    // 执行mutation的订阅者
+    // 订阅者函数遍历执行，传入当前的mutation对象和当前的state
     this._subscribers
       .slice() // shallow copy to prevent iterator invalidation if subscriber synchronously calls unsubscribe
       .forEach(sub => sub(mutation, this.state))
@@ -157,10 +176,10 @@ export class Store {
     const {
       type,
       payload
-    } = unifyObjectStyle(_type, _payload)
+    } = unifyObjectStyle(_type, _payload) // 配置参数处理
 
     const action = { type, payload }
-    // 获取actions数组
+    // 当前type下所有action处理函数集合
     const entry = this._actions[type]
     // 提示不存在action
     if (!entry) {
@@ -728,7 +747,7 @@ function unifyObjectStyle (type, payload, options) {
 }
 
 /**
- * 1. Vuex的注册
+ * 1. Vuex的装载
  *   声明install方法
  *   传入vue对象，把传入的vue对象赋给
  * @param {*} _Vue vm对象
