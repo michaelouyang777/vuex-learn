@@ -1,46 +1,71 @@
 ## vuex 源码学习
 
 
+
+### vuex 研究版本
+vuex v3.6.2
+
+
+
+
 ### 目录结构
 
+vuex的主体目录结构如下：
 ~~~
-|-- .github                            // 贡献者、issue、PR模版
-|-- dist                               // 打包后的文件
-|-- docs                               // 文档
-|-- docs-gitbook                       // 在线文档
-|-- examples                           // 示例代码
+|-- .github                    // 贡献者、issue、PR模版
+|-- dist                       // 打包后的文件
+|-- docs                       // 文档
+|-- docs-gitbook               // 在线文档
+|-- examples                   // 示例代码
 |-- scripts
-|-- src                                // 入口文件以及各种辅助文件
-|-- test                               // 单元测试文件
-|-- types                              // 类型声明
-|-- .babelrc                           // babel相关配置
-|-- .eslintrc.json                     // eslint相关配置
+|-- src                        // 入口文件以及各种辅助文件
+|-- test                       // 单元测试文件
+|-- types                      // 类型声明
+|-- .babelrc                   // babel相关配置
+|-- .eslintrc.json             // eslint相关配置
 |-- .gitignore
 |-- CHANGELOG.md
-|-- jest.config.js                     // jest配置文件
-|-- LICENSE                            // 版权协议相关
+|-- jest.config.js             // jest配置文件
+|-- LICENSE                    // 版权协议相关
 |-- package.json
-|-- README.md                          // 项目说明文档
+|-- README.md                  // 项目说明文档
 |-- rollup.config.js
 |-- rollup.logger.config.js
 |-- rollup.main.config.js
 |-- yarn.lock
 ~~~
 
-首先看看src文件夹中有些什么文件
-- 【module】 模块相关处理的文件夹
-  + 【module.js】 生成模块对象
-  + 【module-collection.js】 递归解析模块配置，生成由「module.js 」的模块对象组成的模块树
-- 【plugins】 插件相关，与主体功能无关
-  + 【devtool.js】 chrome 的 vue 调试插件中使用到的代码，主要实现数据回滚功能
-  + 【logger.js】 日志打印相关
-- 【helpers.js】 辅助函数，mapGetters，mapActions，mapMutations等函数的实现
-- 【index.cjs.js】入口文件
-- 【index.js】入口文件
-- 【index.mjs】入口文件
-- 【mixin.js】vue 混合函数，实现 vuex 的安装功能
-- 【store.js】vuex 存储类，实现 vuex 的主体功能。
-- 【util.js】工具函数库，复用一些常用函数
+再来看看src文件夹中有些什么文件
+~~~
+|-- module                     // 模块相关处理的文件夹
+|   |-- module.js              // 生成模块对象
+|   |-- module-collection.js   // 递归解析模块配置，生成由「module.js 」的模块对象组成的模块树
+|-- plugin                     // 插件相关，与主体功能无关
+|   |-- devtool.js             // chrome 的 vue 调试插件中使用到的代码，主要实现数据回滚功能
+|   |-- logger.js              // 日志打印相关
+|-- helpers.js                 // 辅助函数。提供mapGetters、mapActions、mapMutations等函数的实现
+|-- index.js                   // 入口文件
+|-- mixin.js                   // vue 混合函数，实现 vuex 的安装功能
+|-- store.js                   // vuex 存储类，实现 vuex 的主体功能
+|-- util.js                    // 工具函数库，复用一些常用函数
+~~~
+
+
+
+
+--------------------------------------
+
+
+
+
+### 学习源码前的一些疑问
+
+先将问题抛出来，使学习和研究更有针对性：
+1. 使用Vuex只需执行 Vue.use(Vuex)，并在Vue的配置中传入一个store对象的示例，store是如何实现注入的？
+2. state内部是如何实现支持模块配置和模块嵌套的？
+3. 在执行dispatch触发action（commit同理）的时候，只需传入（type, payload），action执行函数中第一个参数store从哪里获取的？
+4. 如何区分state是外部直接修改，还是通过mutation方法修改的？
+5. 调试时的“时空穿梭”功能是如何实现的？
 
 
 
@@ -52,47 +77,105 @@
 
 ### 源码分析
 
-先从一个简单的示例入手，一步一步分析整个代码的执行过程，下面是官方提供的简单示例
+#### 1. 初始化装载与注入
+
+##### 1-1. 装载实例
+
+先从一个简单的示例入手，一步一步分析整个代码的执行过程，下面是一个简单示例：
 
 ```js
 // store.js
+// 加载Vuex，创建并导出一个空配置的store对象实例。
+
 import Vue from 'vue'
 import Vuex from 'vuex'
 
 Vue.use(Vuex)
+
+export default new Vuex.Store()
 ```
 
-#### 1. Vuex的注册
+```js
+// main.js
+// 在Vue主入口文件中，引入store到装载到vue options上
+import Vue from 'vue'
+import App from './../pages/app.vue'
+import store from './store.js'
 
-Vue官方建议的插件使用方法是使用Vue.use方法，这个方法会调用插件的install方法，看看install方法都做了些什么，从index.js中可以看到install方法在store.js中抛出，部分代码如下
+new Vue({
+  el: '#root',
+  store, 
+  render: h => h(App)
+})
+```
+
+##### 1-2. 装载分析
+
+Vue官方建议的插件使用方法是使用Vue.use()方法，这个方法会调用插件的install方法，将Vuex装载到Vue对象上。先看下Vue.use方法实现：
 
 ```js
-let Vue // bind on install
+function (plugin: Function | Object) {
+  /* istanbul ignore if */
+  if (plugin.installed) {
+    return
+  }
+  // additional parameters
+  const args = toArray(arguments, 1)
+  args.unshift(this)
+  if (typeof plugin.install === 'function') {
+    // 实际执行插件的install方法
+    plugin.install.apply(plugin, args)
+  } else {
+    plugin.apply(null, args)
+  }
+  plugin.installed = true
+  return this
+}
+```
 
+store.js内定义局部 Vue 变量，用于判断是否已经装载和减少全局作用域查找。
+
+```js 
+// store.js
+// 声明了一个Vue变量，这个变量在install方法中会被赋值，
+// 这样可以给当前作用域提供Vue，这样做的好处是不需要额外import Vue from 'vue'
+let Vue
+
+
+// 若是首次加载，将局部Vue变量赋值为全局的Vue对象，并执行applyMixin方法
 export function install (_Vue) {
+  // 判断是否已经存在Vue对象，有则返回
   if (Vue && _Vue === Vue) {
-    if (process.env.NODE_ENV !== 'production') {
+    if (__DEV__) {
       console.error(
         '[vuex] already installed. Vue.use(Vuex) should be called only once.'
       )
     }
     return
   }
+  // 赋给全局的Vue变量
   Vue = _Vue
+  // 执行引入mixin方法
   applyMixin(Vue)
 }
 ```
 
-声明了一个Vue变量，这个变量在install方法中会被赋值，这样可以给当前作用域提供Vue，这样做的好处是不需要额外`import Vue from 'vue'` 不过我们也可以这样写，然后让打包工具不要将其打包，而是指向开发者所提供的Vue，比如webpack的`externals`，这里就不展开了。执行install会先判断Vue是否已经被赋值，避免二次安装。然后调用`applyMixin`方法，代码如下
+声明了一个Vue变量，这个变量在install方法中会被赋值，这样可以给当前作用域提供Vue，这样做的好处是不需要额外`import Vue from 'vue'` 不过我们也可以这样写，然后让打包工具不要将其打包，而是指向开发者所提供的Vue，比如webpack的`externals`，这里就不展开了。
+
+执行install会先判断Vue是否已经被赋值，避免二次安装。然后调用`applyMixin`方法，代码如下：
 
 ```js
 // applyMixin
 export default function (Vue) {
+  // 获取Vue对象内的版本信息
   const version = Number(Vue.version.split('.')[0])
 
+  // 如果版本>=2，则使用混入
   if (version >= 2) {
     Vue.mixin({ beforeCreate: vuexInit })
-  } else {
+  } 
+  // 如果版本不是>=2，则使用原型
+  else {
     // override init and inject vuex init procedure
     // for 1.x backwards compatibility.
     const _init = Vue.prototype._init
@@ -106,8 +189,11 @@ export default function (Vue) {
 
   /**
    * Vuex init hook, injected into each instances init hooks list.
+   * 
+   * 当我们在执行new Vue启动一个Vue应用程序时，需要给上store字段，
+   * 根组件从这里拿到store，子组件从父组件拿到，这样一层一层传递下去，
+   * 实现所有组件都有$store属性，这样我们就可以在任何组件中通过this.$store访问到store
    */
-
   function vuexInit () {
     const options = this.$options
     // store injection
@@ -126,12 +212,27 @@ export default function (Vue) {
 }
 ```
 
-这里会区分vue的版本，2.x和1.x的钩子是不一样的，如果是2.x使用`beforeCreate`，1.x即使用`_init`。当我们在执行`new Vue`启动一个Vue应用程序时，需要给上`store`字段，根组件从这里拿到`store`，子组件从父组件拿到，这样一层一层传递下去，实现所有组件都有`$store`属性，这样我们就可以在任何组件中通过`this.$store`访问到`store`
+这里会区分vue的版本，2.x和1.x的钩子是不一样的，如果是2.x使用`beforeCreate`，1.x即使用`_init`。
+
+当我们在执行`new Vue`启动一个Vue应用程序时，需要给上`store`变量，根组件从这里拿到`store`，子组件从父组件拿到，这样一层一层传递下去，实现所有组件都有`$store`属性，这样我们就可以在任何组件中通过`this.$store`访问到`store`
+
+看个图例理解下store的传递。
+
+页面Vue结构图：
+![component-tree](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/component-tree.jpeg)
+
+对应store流向：
+![store-flow](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/store-flow.jpeg)
+
+
+
+#### 2.store初始化
 
 接下去继续看例子
 
 ```js
 // store.js
+
 export default new Vuex.Store({
   state: {
     count: 0
@@ -155,15 +256,13 @@ export default new Vuex.Store({
 ```
 
 ```js
-// app.js
+// main.js
 new Vue({
   el: '#app',
   store, // 传入store，在beforeCreate钩子中会用到
   render: h => h(Counter)
 })
 ```
-
-#### 2.store初始化
 
 这里是调用Store构造函数，传入一个对象，包括state、actions等等，接下去看看Store构造函数都做了些什么
 
