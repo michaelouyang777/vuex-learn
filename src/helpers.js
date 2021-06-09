@@ -8,22 +8,28 @@ import { isObject } from './util'
  * @param {Object}
  */
 export const mapState = normalizeNamespace((namespace, states) => {
+  // 声明临时变量
   const res = {}
   if (__DEV__ && !isValidMap(states)) {
     console.error('[vuex] mapState: mapper parameter must be either an Array or an Object')
   }
+  // 格式化states，并遍历它
   normalizeMap(states).forEach(({ key, val }) => {
+    // 存放临时变量中（存放的是函数）
     res[key] = function mappedState () {
       let state = this.$store.state
       let getters = this.$store.getters
       if (namespace) {
+        // 如果存在namespace，拿该namespace下的module
         const module = getModuleByNamespace(this.$store, 'mapState', namespace)
         if (!module) {
           return
         }
+        // 拿到当前module的state和getters
         state = module.context.state
         getters = module.context.getters
       }
+      // Object类型的val是函数，传递过去的参数是state和getters
       return typeof val === 'function'
         ? val.call(this, state, getters)
         : state[val]
@@ -42,19 +48,24 @@ export const mapState = normalizeNamespace((namespace, states) => {
  * @return {Object}
  */
 export const mapMutations = normalizeNamespace((namespace, mutations) => {
+  // 声明临时变量
   const res = {}
   if (__DEV__ && !isValidMap(mutations)) {
     console.error('[vuex] mapMutations: mapper parameter must be either an Array or an Object')
   }
+  // 格式化mutations，并遍历它
   normalizeMap(mutations).forEach(({ key, val }) => {
+    // 存放临时变量中（存放的是函数）
     res[key] = function mappedMutation (...args) {
       // Get the commit method from store
       let commit = this.$store.commit
       if (namespace) {
+        // 如果存在namespace，拿该namespace下的module
         const module = getModuleByNamespace(this.$store, 'mapMutations', namespace)
         if (!module) {
           return
         }
+        // 拿到当前module的commit
         commit = module.context.commit
       }
       return typeof val === 'function'
@@ -73,13 +84,16 @@ export const mapMutations = normalizeNamespace((namespace, mutations) => {
  * @return {Object}
  */
 export const mapGetters = normalizeNamespace((namespace, getters) => {
+  // 声明临时变量
   const res = {}
   if (__DEV__ && !isValidMap(getters)) {
     console.error('[vuex] mapGetters: mapper parameter must be either an Array or an Object')
   }
+  // 格式化getters，并遍历它
   normalizeMap(getters).forEach(({ key, val }) => {
     // The namespace has been mutated by normalizeNamespace
     val = namespace + val
+    // 存放临时变量中（存放的是函数）
     res[key] = function mappedGetter () {
       if (namespace && !getModuleByNamespace(this.$store, 'mapGetters', namespace)) {
         return
@@ -104,19 +118,24 @@ export const mapGetters = normalizeNamespace((namespace, getters) => {
  * @return {Object}
  */
 export const mapActions = normalizeNamespace((namespace, actions) => {
+  // 声明临时变量
   const res = {}
   if (__DEV__ && !isValidMap(actions)) {
     console.error('[vuex] mapActions: mapper parameter must be either an Array or an Object')
   }
+  // 格式化actions，并遍历它
   normalizeMap(actions).forEach(({ key, val }) => {
+    // 存放临时变量中（存放的是函数）
     res[key] = function mappedAction (...args) {
       // get dispatch function from store
       let dispatch = this.$store.dispatch
       if (namespace) {
+        // 如果存在namespace，拿该namespace下的module
         const module = getModuleByNamespace(this.$store, 'mapActions', namespace)
         if (!module) {
           return
         }
+        // 拿到当前module的dispatch
         dispatch = module.context.dispatch
       }
       return typeof val === 'function'
@@ -149,9 +168,12 @@ export const createNamespacedHelpers = (namespace) => ({
  * @return {Object}
  */
 function normalizeMap (map) {
+  // 验证map
   if (!isValidMap(map)) {
     return []
   }
+  // 如果是数组则用map映射一个新数据结构，
+  // 否则获取对象的keys数组，再用map映射一个新数据结构
   return Array.isArray(map)
     ? map.map(key => ({ key, val: key }))
     : Object.keys(map).map(key => ({ key, val: map[key] }))
@@ -159,7 +181,7 @@ function normalizeMap (map) {
 
 /**
  * Validate whether given map is valid or not
- * 验证给定的映射是否有效
+ * 验证map是数组还是或者是对象
  * @param {*} map
  * @return {Boolean}
  */
@@ -194,6 +216,7 @@ function normalizeNamespace (fn) {
  * @return {Object}
  */
 function getModuleByNamespace (store, helper, namespace) {
+  // 从_modulesNamespaceMap中获取对应namespace的模块
   const module = store._modulesNamespaceMap[namespace]
   if (__DEV__ && !module) {
     console.error(`[vuex] module namespace not found in ${helper}(): ${namespace}`)
