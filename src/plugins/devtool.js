@@ -10,12 +10,15 @@ export default function devtoolPlugin (store) {
 
   store._devtoolHook = devtoolHook
 
+  // 触发vuex:init
   devtoolHook.emit('vuex:init', store)
 
+  // 时空穿梭功能
   devtoolHook.on('vuex:travel-to-state', targetState => {
     store.replaceState(targetState)
   })
 
+  // 订阅mutation，当触发mutation时触发vuex:mutation方法，传入mutation和state
   store.subscribe((mutation, state) => {
     devtoolHook.emit('vuex:mutation', mutation, state)
   }, { prepend: true })

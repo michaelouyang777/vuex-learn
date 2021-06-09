@@ -92,6 +92,7 @@ export class Store {
     // 插件注册
     plugins.forEach(plugin => plugin(this))
 
+    // 如果开启devtools，注册devtool
     const useDevtools = options.devtools !== undefined ? options.devtools : Vue.config.devtools
     if (useDevtools) {
       devtoolPlugin(this)
