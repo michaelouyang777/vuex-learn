@@ -83,14 +83,14 @@ export class Store {
       return commit.call(store, type, payload, options)
     }
 
-    // strict mode
-    this.strict = strict
-    const state = this._modules.root.state
-
 
     /************************
      * 组装module
      ************************/
+    // strict mode
+    this.strict = strict
+    const state = this._modules.root.state
+    
     // init root module.
     // this also recursively registers all sub-modules
     // and collects all module getters inside this._wrappedGetters
@@ -452,15 +452,17 @@ function resetStoreVM (store, state, hot) {
 
 /**
  * 组装module
- * @param {*} store 
- * @param {*} rootState 
- * @param {*} path 
- * @param {*} module 
+ * @param {Ojbect} store store
+ * @param {Ojbect} rootState 对应store的module的state
+ * @param {Array} path 路径
+ * @param {Ojbect} module 对应store的module
  * @param {*} hot 
  */
 function installModule (store, rootState, path, module, hot) {
+  // path中字符为0，则说明是根root
   const isRoot = !path.length
-  /*
+  /**
+   * 获取path的命名空间
    * {
    *   // ...
    *   modules: {
@@ -476,12 +478,12 @@ function installModule (store, rootState, path, module, hot) {
   const namespace = store._modules.getNamespace(path)
 
   // register in namespace map
-  // 如果有注册命名空间的module
+  // 如果module有命名空间
   if (module.namespaced) {
     if (store._modulesNamespaceMap[namespace] && __DEV__) {
       console.error(`[vuex] duplicate namespace ${namespace} for the namespaced module ${path.join('/')}`)
     }
-    // 保存namespaced模块
+    // 将module保存到对应namespace的store上
     store._modulesNamespaceMap[namespace] = module
   }
 
@@ -507,23 +509,23 @@ function installModule (store, rootState, path, module, hot) {
     })
   }
 
-  // 设置module的上下文，从而保证mutation和action的第一个参数能拿到对应的state getter等
+  // 设置module的上下文，绑定对应的dispatch、commit、getters、state
   const local = module.context = makeLocalContext(store, namespace, path)
 
-  // 逐一注册mutation
+  // 逐一注册对应模块的mutation，供state修改使用
   module.forEachMutation((mutation, key) => {
     const namespacedType = namespace + key
     registerMutation(store, namespacedType, mutation, local)
   })
 
-  // 逐一注册action
+  // 逐一注册对应模块的action，供数据操作、提交mutation等异步操作使用
   module.forEachAction((action, key) => {
     const type = action.root ? key : namespace + key
     const handler = action.handler || action
     registerAction(store, type, handler, local)
   })
 
-  // 逐一注册getter
+  // 逐一注册对应模块的getters，供state读取使用
   module.forEachGetter((getter, key) => {
     const namespacedType = namespace + key
     registerGetter(store, namespacedType, getter, local)
@@ -546,11 +548,13 @@ function makeLocalContext (store, namespace, path) {
 
   const local = {
     // 如果没有namespace，直接使用原来的
+    // 如果存在namespace，type需要加上对应的namespace
     dispatch: noNamespace ? store.dispatch : (_type, _payload, _options) => {
       // 统一格式 因为支持payload风格和对象风格
       const args = unifyObjectStyle(_type, _payload, _options)
       const { payload, options } = args
       let { type } = args
+
       // 如果root: true 不会加上namespace 即在命名空间模块里提交根的 action
       if (!options || !options.root) {
         // 加上命名空间
@@ -565,11 +569,13 @@ function makeLocalContext (store, namespace, path) {
     },
 
     // 如果没有namespace，直接使用原来的
+    // 如果存在namespace，type需要加上对应的namespace
     commit: noNamespace ? store.commit : (_type, _payload, _options) => {
       // 统一格式 因为支持payload风格和对象风格
       const args = unifyObjectStyle(_type, _payload, _options)
       const { payload, options } = args
       let { type } = args
+
       // 如果root: true 不会加上namespace 即在命名空间模块里提交根的 mutation
       if (!options || !options.root) {
         // 加上命名空间
@@ -634,15 +640,15 @@ function makeLocalGetters (store, namespace) {
 /**
  * 注册mutation
  *   mutation的注册主要是包一层函数，然后保存到store._mutations里面
- * @param {*} store 
+ * @param {*} store store对象
  * @param {*} type mutation的key（namespace处理后的）
  * @param {*} handler handler函数
  * @param {*} local module的上下文
  */
 function registerMutation (store, type, handler, local) {
-  // 首先判断store._mutations是否存在，否则给空数组
+  // 取出对应type的mutations-handler集合，如果没有则给个空数组
   const entry = store._mutations[type] || (store._mutations[type] = [])
-  // 将mutation包一层函数，push到数组中
+  // 将mutation包一层函数，push到数组中（commit实际调用的不是我们传入的handler，而是再经过了一层函数封装）
   entry.push(function wrappedMutationHandler (payload) {
     // 包一层，commit执行时只需要传入payload
     // 执行时让this指向store，参数为当前module上下文的state和用户额外添加的payload
@@ -652,18 +658,17 @@ function registerMutation (store, type, handler, local) {
 
 /**
  * 注册action
- * @param {*} store 
+ * @param {*} store store对象
  * @param {*} type type（namespace处理后的）
  * @param {*} handler handler函数
  * @param {*} local module的上下文
  */
 function registerAction (store, type, handler, local) {
-  // 获取_actions数组，不存在即赋值为空数组
+  // 取出对应type的actions-handler集合，如果没有则给个空数组
   const entry = store._actions[type] || (store._actions[type] = [])
-  // push到数组中
+  // 存储新的封装过的action-handler到数组中
   entry.push(function wrappedActionHandler (payload) {
-    // 包一层，执行时需要传入payload和cb
-    // 执行action
+    // 包一层，action执行时需要传入state等对象，以及payload
     let res = handler.call(store, {
       dispatch: local.dispatch,
       commit: local.commit,
@@ -690,7 +695,7 @@ function registerAction (store, type, handler, local) {
 
 /**
  * 注册getter
- * @param {*} store 
+ * @param {*} store store对象
  * @param {*} type type（namesapce处理后的）
  * @param {*} rawGetter getter函数
  * @param {*} local module上下文
@@ -703,8 +708,9 @@ function registerGetter (store, type, rawGetter, local) {
     }
     return
   }
-  // 包一层，保存到_wrappedGetters中
+  // 存储封装过的getters处理函数
   store._wrappedGetters[type] = function wrappedGetter (store) {
+    // 包一层，保存到_wrappedGetters中
     return rawGetter(
       local.state, // local state
       local.getters, // local getters
@@ -717,7 +723,7 @@ function registerGetter (store, type, rawGetter, local) {
 /**
  * 使用$watch来观察state的变化，如果此时的store._committing不会true，
  * 便是在mutation之外修改state，报错。
- * @param {*} store 
+ * @param {*} store store对象
  */
 function enableStrictMode (store) {
   store._vm.$watch(function () { return this._data.$$state }, () => {

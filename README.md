@@ -562,7 +562,7 @@ export default class Module {
 5. 再判断当前module是否存在子module，递归遍历所有的module，并调用 `this.register(path.concat(key), rawChildModule, runtime)` 对module进行注册。
 6. 最终options对象被构造成一个完整的组件树。
 
-![ModuleCollection](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/module-collection.jpg)
+![ModuleCollection](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/module-collection.jpeg)
 
 
 
@@ -737,19 +737,40 @@ _withCommit (fn) {
 
 
 
-##### 2-5. 模块安装
+##### 2-5. module模块安装
 
-接着是store的核心代码
+module模块安装是store的核心部分。
+
+绑定dispatch和commit方法之后，进行严格模式的设置，以及模块的安装（installModule）。
+> 由于占用资源较多影响页面性能，严格模式建议只在开发模式开启，上线后需要关闭。
 
 ```js
-// 这里是module处理的核心，包括处理根module、命名空间、action、mutation、getters和递归注册子module
+// store.js
+
+// strict mode
+this.strict = strict
+
+// init root module.
+// this also recursively registers all sub-modules
+// and collects all module getters inside this._wrappedGetters
+// 这里是module处理的核心，包括处理根module、action、mutation、getters和递归注册子module
 installModule(this, state, [], this._modules.root)
 ```
 
 ```js
+/**
+ * 组装module
+ * @param {Ojbect} store store
+ * @param {Ojbect} rootState 对应store的module的state
+ * @param {Array} path 路径
+ * @param {Ojbect} module 对应store的module
+ * @param {*} hot 
+ */
 function installModule (store, rootState, path, module, hot) {
+  // path中字符为0，则说明是根root
   const isRoot = !path.length
-  /*
+  /**
+   * 获取path的命名空间
    * {
    *   // ...
    *   modules: {
@@ -765,55 +786,135 @@ function installModule (store, rootState, path, module, hot) {
   const namespace = store._modules.getNamespace(path)
 
   // register in namespace map
+  // 如果module有命名空间
   if (module.namespaced) {
-    // 保存namespaced模块
+    if (store._modulesNamespaceMap[namespace] && __DEV__) {
+      console.error(`[vuex] duplicate namespace ${namespace} for the namespaced module ${path.join('/')}`)
+    }
+    // 将module保存到对应namespace的store上
     store._modulesNamespaceMap[namespace] = module
   }
 
   // set state
+  // 判断是否为根组件且不是hot，得到父级module的state和当前module的name，
+  // 调用Vue.set(parentState, moduleName, module.state)将当前module的state挂载到父state上
   if (!isRoot && !hot) {
     // 非根组件设置state
     // 根据path获取父state
     const parentState = getNestedState(rootState, path.slice(0, -1))
-    // 当前的module key
+    // 当前的module
     const moduleName = path[path.length - 1]
     store._withCommit(() => {
+      if (__DEV__) {
+        if (moduleName in parentState) {
+          console.warn(
+            `[vuex] state field "${moduleName}" was overridden by a module with the same name at "${path.join('.')}"`
+          )
+        }
+      }
       // 使用Vue.set将state设置为响应式
       Vue.set(parentState, moduleName, module.state)
     })
   }
 
-  // 绑定局部上下文对应的各种属性，包括dispath、commit、getters、state，因为存在 namespaced 的话, 需要做特殊处理，这个属性是我们写actions、mutations时的第一个参数部分从这里取
+  // 设置module的上下文，绑定对应的dispatch、commit、getters、state
   const local = module.context = makeLocalContext(store, namespace, path)
 
-  // 逐一注册mutation
+  // 逐一注册对应模块的mutation，供state修改使用
   module.forEachMutation((mutation, key) => {
     const namespacedType = namespace + key
     registerMutation(store, namespacedType, mutation, local)
   })
 
-  // 逐一注册action
+  // 逐一注册对应模块的action，供数据操作、提交mutation等异步操作使用
   module.forEachAction((action, key) => {
     const type = action.root ? key : namespace + key
     const handler = action.handler || action
     registerAction(store, type, handler, local)
   })
 
-  // 逐一注册getter
+  // 逐一注册对应模块的getters，供state读取使用
   module.forEachGetter((getter, key) => {
     const namespacedType = namespace + key
     registerGetter(store, namespacedType, getter, local)
   })
 
-  // 逐一注册子module
+  // 递归注册子module
   module.forEachChild((child, key) => {
     installModule(store, rootState, path.concat(key), child, hot)
   })
 }
 ```
 
-首先保存`namespaced`模块到`store._modulesNamespaceMap`，再判断是否为根组件且不是hot，得到父级module的state和当前module的name，调用`Vue.set(parentState, moduleName, module.state)`将当前module的state挂载到父state上。接下去会设置module的上下文，因为可能存在`namespaced`，需要额外处理
+###### 2-5-1. 初始化rootState
 
+`installModule`方法初始化组件树根组件、注册所有子组件，并将其中所有的getters存储到this._wrappedGetters属性中，看看其中的代码实现：
+```js
+// store.js
+
+function installModule (store, rootState, path, module, hot) {
+  // path中字符为0，则说明是根root
+  const isRoot = !path.length
+  // 获取path的命名空间
+  const namespace = store._modules.getNamespace(path)
+
+  // register in namespace map
+  // 如果module有命名空间
+  if (namespace) {
+    // 将module保存到对应namespace的store上
+    store._modulesNamespaceMap[namespace] = module
+  }
+
+  // 非根组件设置 state 方法
+  if (!isRoot && !hot) {
+    const parentState = getNestedState(rootState, path.slice(0, -1))
+    const moduleName = path[path.length - 1]
+    store._withCommit(() => {
+      // 使用Vue.set将state设置为响应式
+      Vue.set(parentState, moduleName, module.state)
+    })
+  }
+  
+  ······
+}
+```
+
+获取path的命名空间，判断是否存在`namespace`，如果module有命名空间，将module保存到对应namespace的store上。
+再判断是否为根组件且不是hot条件的情况下，
+通过getNestedState方法拿到父级module的state，
+拿到当前module的name，
+调用`Vue.set(parentState, moduleName, module.state)`方法，将当前module的state挂载到父state对象的moduleName属性中，由此实现该模块的state注册（首次执行这里，因为是根目录注册，所以并不会执行该条件中的方法）。
+
+getNestedState方法代码很简单，分析path拿到state，如下：
+```js
+// module/module-collection.js
+
+function getNestedState (state, path) {
+  return path.length
+    ? path.reduce((state, key) => state[key], state)
+    : state
+}
+```
+
+
+###### 2-5-2. module上下文环境设置
+
+命名空间和根目录条件判断完毕后，接下来定义 **local变量** 和 **module.context** 的值。执行`makeLocalContext`方法，**为该module设置局部的 dispatch、commit、getters和state**（由于namespace的存在需要做兼容处理）。
+
+```js
+// store.js
+
+function installModule (store, rootState, path, module, hot) {
+  ······
+
+  // 设置module的上下文，绑定对应的dispatch、commit、getters、state
+  const local = module.context = makeLocalContext(store, namespace, path)
+  
+  ······
+}
+```
+
+这里会判断`module`的`namespace`是否存在，不存在不会对`dispatch`和`commit`做处理，如果存在，给`type`加上`namespace`，如果声明了`{root: true}`也不做处理，另外`getters`和`state`需要延迟处理，需要等数据更新后才进行计算，所以使用`Object.defineProperties`的getter函数，当访问的时候再进行计算。
 ```js
 // 设置module的上下文，绑定对应的dispatch、commit、getters、state
 function makeLocalContext (store, namespace, path) {
@@ -822,7 +923,7 @@ function makeLocalContext (store, namespace, path) {
 
   const local = {
     // 如果没有namespace，直接使用原来的
-    // 如果存在，type需要加上对应的namespace
+    // 如果存在namespace，type需要加上对应的namespace
     dispatch: noNamespace ? store.dispatch : (_type, _payload, _options) => {
       // 统一格式 因为支持payload风格和对象风格
       const args = unifyObjectStyle(_type, _payload, _options)
@@ -833,7 +934,7 @@ function makeLocalContext (store, namespace, path) {
       if (!options || !options.root) {
         // 加上命名空间
         type = namespace + type
-        if (process.env.NODE_ENV !== 'production' && !store._actions[type]) {
+        if (__DEV__ && !store._actions[type]) {
           console.error(`[vuex] unknown local action type: ${args.type}, global type: ${type}`)
           return
         }
@@ -842,17 +943,19 @@ function makeLocalContext (store, namespace, path) {
       return store.dispatch(type, payload)
     },
 
+    // 如果没有namespace，直接使用原来的
+    // 如果存在namespace，type需要加上对应的namespace
     commit: noNamespace ? store.commit : (_type, _payload, _options) => {
       // 统一格式 因为支持payload风格和对象风格
       const args = unifyObjectStyle(_type, _payload, _options)
       const { payload, options } = args
       let { type } = args
-
+      
       // 如果root: true 不会加上namespace 即在命名空间模块里提交根的 mutation
       if (!options || !options.root) {
         // 加上命名空间
         type = namespace + type
-        if (process.env.NODE_ENV !== 'production' && !store._mutations[type]) {
+        if (__DEV__ && !store._mutations[type]) {
           console.error(`[vuex] unknown local mutation type: ${args.type}, global type: ${type}`)
           return
         }
@@ -864,7 +967,8 @@ function makeLocalContext (store, namespace, path) {
 
   // getters and state object must be gotten lazily
   // because they will be changed by vm update
-  // 这里的getters和state需要延迟处理，需要等数据更新后才进行计算，所以使用getter函数，当访问的时候再进行一次计算
+  // 这里的getters和state需要延迟处理，需要等数据更新后才进行计算，
+  // 所以使用Object.defineProperties的getter函数，当访问的时候再进行一次计算
   Object.defineProperties(local, {
     getters: {
       get: noNamespace
@@ -880,47 +984,90 @@ function makeLocalContext (store, namespace, path) {
 }
 
 function makeLocalGetters (store, namespace) {
-  const gettersProxy = {}
+  if (!store._makeLocalGettersCache[namespace]) {
+    const gettersProxy = {}
+    const splitPos = namespace.length
+    Object.keys(store.getters).forEach(type => {
+      // skip if the target getter is not match this namespace
+      // 如果getter不在该命名空间下 直接return
+      if (type.slice(0, splitPos) !== namespace) return
 
-  const splitPos = namespace.length
-  Object.keys(store.getters).forEach(type => {
-    // 如果getter不在该命名空间下 直接return
-    if (type.slice(0, splitPos) !== namespace) return
+      // extract local getter type
+      // 去掉type上的命名空间
+      const localType = type.slice(splitPos)
 
-    // 去掉type上的命名空间
-    const localType = type.slice(splitPos)
-
-    // Add a port to the getters proxy.
-    // Define as getter property because
-    // we do not want to evaluate the getters in this time.
-    // 给getters加一层代理 局部使用时不需要加上namespace
-    Object.defineProperty(gettersProxy, localType, {
-      get: () => store.getters[type],
-      enumerable: true
+      // Add a port to the getters proxy.
+      // Define as getter property because
+      // we do not want to evaluate the getters in this time.
+      // 给getters加一层代理 这样在module中获取到的getters不会带命名空间，
+      // 实际返回的是store.getters[type] type是有命名空间的
+      Object.defineProperty(gettersProxy, localType, {
+        get: () => store.getters[type],
+        enumerable: true
+      })
     })
-  })
+    store._makeLocalGettersCache[namespace] = gettersProxy
+  }
 
-  return gettersProxy
+  return store._makeLocalGettersCache[namespace]
 }
 
 function getNestedState (state, path) {
-  return path.length ? path.reduce((state, key) => state[key], state) : state
+  return path.reduce((state, key) => state[key], state)
 }
 
 ```
 
-这里会判断`module`的`namespace`是否存在，不存在不会对`dispatch`和`commit`做处理，如果存在，给`type`加上`namespace`，如果声明了`{root: true}`也不做处理，另外`getters`和`state`需要延迟处理，需要等数据更新后才进行计算，所以使用`Object.defineProperties`的getter函数，当访问的时候再进行计算
 
-再回到上面的流程，接下去是逐步注册`mutation` `action` `getter` `子module`，先看注册`mutation`
+
+###### 2-5-3. mutations、actions、getters注册
+
+定义local环境后，循环注册我们在options中配置的 **action、mutation、getters** 等。逐个分析各注册函数之前，先看下模块间的逻辑关系流程图：
+![vuex-flow](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-flow.jpg)
+
+下面分析代码逻辑：
+```js
+// 注册对应模块的mutation，供state修改使用
+module.forEachMutation((mutation, key) => {
+  const namespacedType = namespace + key
+  registerMutation(store, namespacedType, mutation, local)
+})
+
+// 注册对应模块的action，供数据操作、提交mutation等异步操作使用
+module.forEachAction((action, key) => {
+  const namespacedType = namespace + key
+  registerAction(store, namespacedType, action, local)
+})
+
+// 注册对应模块的getters，供state读取使用
+module.forEachGetter((getter, key) => {
+  const namespacedType = namespace + key
+  registerGetter(store, namespacedType, getter, local)
+})
+```
+
+先看注册`mutation`：
+
+`mutation`的注册比较简单，主要是包一层函数，然后保存到`store._mutations`里面。
+由于是通过push存到`store._mutations`里面，所以`mutation`可以重复注册，不会覆盖。
+
+`registerMutation`方法中，获取store中的对应mutation type的处理函数集合，将新的处理函数push进去。
+这里将我们设置在mutations type上对应的 handler 进行了封装，给原函数传入了state。
+在执行 `this.$store.commit('xxx', payload)` 的时候，type为 'xxx' 的mutation的所有handler都会接收到state以及payload，这就是在handler里面拿到state的原因。
 
 ```js
-/*
- * 参数是store、mutation的key（namespace处理后的）、handler函数、当前module局部上下文
+/**
+ * 注册mutation
+ *   mutation的注册主要是包一层函数，然后保存到store._mutations里面
+ * @param {*} store store对象
+ * @param {*} type mutation的key（namespace处理后的）
+ * @param {*} handler handler函数
+ * @param {*} local module的上下文
  */
 function registerMutation (store, type, handler, local) {
-  // 首先判断store._mutations是否存在，否则给空数组
+  // 取出对应type的mutations-handler集合，如果没有则给个空数组
   const entry = store._mutations[type] || (store._mutations[type] = [])
-  // 将mutation包一层函数，push到数组中
+  // 将mutation包一层函数，push到数组中（commit实际调用的不是我们传入的handler，而是再经过了一层函数封装）
   entry.push(function wrappedMutationHandler (payload) {
     // 包一层，commit执行时只需要传入payload
     // 执行时让this指向store，参数为当前module上下文的state和用户额外添加的payload
@@ -929,8 +1076,9 @@ function registerMutation (store, type, handler, local) {
 }
 ```
 
-`mutation`的注册比较简单，主要是包一层函数，然后保存到`store._mutations`里面，在这里也可以知道，`mutation`可以重复注册，不会覆盖，当用户调用`this.$store.commit(mutationType, payload)`时会触发，接下去看看`commit`函数
+再来看看store的实例方法commit方式的实现：
 
+首先对参数进行统一处理，因为是支持对象风格和载荷风格的，然后拿到当前`type`对应的mutation数组，使用`_withCommit`包裹逐一执行，这样我们执行`this.$store.commit`的时候会调用对应的`mutation`，而且第一个参数是`state`，然后再执行`mutation`的订阅函数
 ```js
 // 这里的this已经被绑定为store
 commit (_type, _payload, _options) {
@@ -974,34 +1122,31 @@ commit (_type, _payload, _options) {
 }
 ```
 
-首先对参数进行统一处理，因为是支持对象风格和载荷风格的，然后拿到当前`type`对应的mutation数组，使用`_withCommit`包裹逐一执行，这样我们执行`this.$store.commit`的时候会调用对应的`mutation`，而且第一个参数是`state`，然后再执行`mutation`的订阅函数
+接下去看`action`的注册：
 
-接下去看`action`的注册
-
+和`mutation`很类似，使用函数包一层然后push到`store._actions`中，有些不同的是执行时参数比较多，这也是为什么我们在写`action`时可以解构拿到`commit`等的原因，然后再将返回值`promisify`，这样可以支持链式调用，但实际上用的时候最好还是自己返回`promise`，因为通常`action`是异步的，比较多见是发起请求，进行链式调用也是想当异步完成后再执行，具体根据业务需求来。
 ```js
-/*
- * 参数是store、type（namespace处理后的）、handler函数、module上下文
+/**
+ * 注册action
+ * @param {*} store store对象
+ * @param {*} type type（namespace处理后的）
+ * @param {*} handler handler函数
+ * @param {*} local module的上下文
  */
 function registerAction (store, type, handler, local) {
-  // 获取_actions数组，不存在即赋值为空数组
+  // 取出对应type的actions-handler集合，如果没有则给个空数组
   const entry = store._actions[type] || (store._actions[type] = [])
-  // push到数组中
-  entry.push(function wrappedActionHandler (payload, cb) {
-    // 包一层，执行时需要传入payload和cb
-    // 执行action
-    let res = handler.call(
-      store,
-      {
-        dispatch: local.dispatch,
-        commit: local.commit,
-        getters: local.getters,
-        state: local.state,
-        rootGetters: store.getters,
-        rootState: store.state
-      },
-      payload,
-      cb
-    )
+  // 存储新的封装过的action-handler到数组中
+  entry.push(function wrappedActionHandler (payload) {
+    // 包一层，action执行时需要传入state等对象，以及payload
+    let res = handler.call(store, {
+      dispatch: local.dispatch,
+      commit: local.commit,
+      getters: local.getters,
+      state: local.state,
+      rootGetters: store.getters,
+      rootState: store.state
+    }, payload)
     // 如果action的执行结果不是promise，将他包裹为promise，这样就支持promise的链式调用
     if (!isPromise(res)) {
       res = Promise.resolve(res)
@@ -1019,8 +1164,9 @@ function registerAction (store, type, handler, local) {
 }
 ```
 
-和`mutation`很类似，使用函数包一层然后push到`store._actions`中，有些不同的是执行时参数比较多，这也是为什么我们在写`action`时可以解构拿到`commit`等的原因，然后再将返回值`promisify`，这样可以支持链式调用，但实际上用的时候最好还是自己返回`promise`，因为通常`action`是异步的，比较多见是发起ajax请求，进行链式调用也是想当异步完成后再执行，具体根据业务需求来。接下去再看看`dispatch`函数的实现
+接下去再看看`dispatch`函数的实现：
 
+这里和`commit`也是很类似的，对参数统一处理，拿到action数组，如果长度大于一，用`Promise.all`包裹，不过直接执行，然后返回执行结果。
 ```js
 // this已经绑定为store
 dispatch (_type, _payload) {
@@ -1046,25 +1192,28 @@ dispatch (_type, _payload) {
 }
 ```
 
-这里和`commit`也是很类似的，对参数统一处理，拿到action数组，如果长度大于一，用`Promise.all`包裹，不过直接执行，然后返回执行结果。
+接下去是`getters`的注册：
 
-接下去是`getters`的注册和`子module`的注册
-
+首先对`getters`进行判断，和`mutation`是不同的，这里是不允许重复定义的，然后包裹一层函数，这样在调用时只需要给上`store`参数，而用户的函数里会包含`local.state` `local.getters` `store.state` `store.getters`
 ```js
-/*
- * 参数是store、type（namesapce处理后的）、getter函数、module上下文
+/**
+ * 注册getter
+ * @param {*} store store对象
+ * @param {*} type type（namesapce处理后的）
+ * @param {*} rawGetter getter函数
+ * @param {*} local module上下文
  */
 function registerGetter (store, type, rawGetter, local) {
   // 不允许重复定义getters
   if (store._wrappedGetters[type]) {
-    if (process.env.NODE_ENV !== 'production') {
+    if (__DEV__) {
       console.error(`[vuex] duplicate getter key: ${type}`)
     }
     return
   }
-  // 包一层，保存到_wrappedGetters中
+  // 存储封装过的getters处理函数
   store._wrappedGetters[type] = function wrappedGetter (store) {
-    // 执行时传入store，执行对应的getter函数
+    // 包一层，保存到_wrappedGetters中
     return rawGetter(
       local.state, // local state
       local.getters, // local getters
@@ -1075,12 +1224,147 @@ function registerGetter (store, type, rawGetter, local) {
 }
 ```
 
-首先对`getters`进行判断，和`mutation`是不同的，这里是不允许重复定义的，然后包裹一层函数，这样在调用时只需要给上`store`参数，而用户的函数里会包含`local.state` `local.getters` `store.state` `store.getters`
+最后，`wrappedActionHandler` 比 `wrappedMutationHandler` 以及 `wrappedGetter` 多拿到dispatch和commit操作方法，因此action可以进行dispatch action和commit mutation操作。
+
+
+###### 2-5-4. 子module安装
+
+注册完了根组件的actions、mutations以及getters后，递归调用自身，为子组件注册其state，actions、mutations以及getters等。
 
 ```js
 // 递归注册子module
-installModule(store, rootState, path.concat(key), child, hot)
+module.forEachChild((child, key) => {
+  installModule(store, rootState, path.concat(key), child, hot)
+})
 ```
+
+
+
+###### 2-5-5. 实例结合
+
+前面介绍了dispatch和commit方法以及actions等的实现，下面结合一个官方的购物车实例中的部分代码来加深理解。
+
+Vuex配置代码：
+
+```js
+/
+ *  store-index.js store配置文件
+ *
+ /
+
+import Vue from 'vue'
+import Vuex from 'vuex'
+import * as actions from './actions'
+import * as getters from './getters'
+import cart from './modules/cart'
+import products from './modules/products'
+import createLogger from '../../../src/plugins/logger'
+
+Vue.use(Vuex)
+
+const debug = process.env.NODE_ENV !== 'production'
+
+export default new Vuex.Store({
+  actions,
+  getters,
+  modules: {
+    cart,
+    products
+  },
+  strict: debug,
+  plugins: debug ? [createLogger()] : []
+})
+```
+
+Vuex组件module中各模块state配置代码部分：
+```js
+/**
+ *  cart.js
+ *
+ **/
+ 
+const state = {
+  added: [],
+  checkoutStatus: null
+}
+
+/**
+ *  products.js
+ *
+ **/
+ 
+const state = {
+  all: []
+}
+```
+
+加载上述配置后，页面state结构如下图：
+![state](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/state.jpg)
+
+state中的属性配置都是按照option配置中module path的规则来进行的，下面看action的操作实例。
+
+Vuecart组件代码部分：
+```js
+/**
+ *  Cart.vue 省略template代码，只看script部分
+ *
+ **/
+ 
+export default {
+  methods: {
+    // 购物车中的购买按钮，点击后会触发结算。源码中会调用 dispatch方法
+    checkout (products) {
+      this.$store.dispatch('checkout', products)
+    }
+  }
+}
+```
+
+Vuexcart.js组件action配置代码部分：
+```js
+const actions = {
+  checkout ({ commit, state }, products) {
+    const savedCartItems = [...state.added] // 存储添加到购物车的商品
+    commit(types.CHECKOUT_REQUEST) // 设置提交结算状态
+    shop.buyProducts( // 提交api请求，并传入成功与失败的cb-func
+      products,
+      () => commit(types.CHECKOUT_SUCCESS), // 请求返回成功则设置提交成功状态
+      () => commit(types.CHECKOUT_FAILURE, { savedCartItems }) // 请求返回失败则设置提交失败状态
+    )
+  }
+}
+```
+
+Vue组件中点击购买执行当前module的dispatch方法，传入type值为 ‘checkout’，payload值为 ‘products’，在源码中dispatch方法在所有注册过的actions中查找’checkout’的对应执行数组，取出循环执行。执行的是被封装过的被命名为wrappedActionHandler的方法，真正传入的checkout的执行函数在wrappedActionHandler这个方法中被执行，源码如下（注：前面贴过，这里再看一次）：
+```js
+function wrappedActionHandler (payload, cb) {
+    let res = handler({
+      dispatch: local.dispatch,
+      commit: local.commit,
+      getters: local.getters,
+      state: local.state,
+      rootGetters: store.getters,
+      rootState: store.state
+    }, payload, cb)
+    if (!isPromise(res)) {
+      res = Promise.resolve(res)
+    }
+    if (store._devtoolHook) {
+      return res.catch(err => {
+        store._devtoolHook.emit('vuex:error', err)
+        throw err
+      })
+    } else {
+      return res
+    }
+  }
+```
+
+handler在这里就是传入的checkout函数，其执行需要的commit以及state就是在这里被传入，payload也传入了，在实例中对应接收的参数名为products。commit的执行也是同理的，实例中checkout还进行了一次commit操作，提交一次type值为types.CHECKOUT_REQUEST的修改，因为mutation名字是唯一的，这里进行了常量形式的调用，防止命名重复，执行跟源码分析中一致，调用 function wrappedMutationHandler (payload) { handler(local.state, payload) } 封装函数来实际调用配置的mutation方法。
+
+看到完源码分析和上面的小实例，应该能理解dispatch action和commit mutation的工作原理了。接着看源码，看看getters是如何实现state实时访问的。
+
+
 
 ##### 2-6. 使用vue实例保存state和getter
 
@@ -1169,6 +1453,8 @@ function enableStrictMode (store) {
 使用`$watch`来观察`state`的变化，如果此时的`store._committing`不会true，便是在`mutation`之外修改state，报错。
 
 再次回到构造函数，接下来是各类插件的注册
+
+
 
 ##### 2-7. 插件注册
 
