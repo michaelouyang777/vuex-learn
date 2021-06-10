@@ -1366,9 +1366,16 @@ handler在这里就是传入的checkout函数，其执行需要的commit以及st
 
 
 
-##### 2-6. 使用vue实例保存state和getter
 
-接着再继续执行`resetStoreVM(this, state)`，将`state`和`getters`存放到一个`vue实例`中，
+
+
+
+
+
+
+##### 2-6. store._vm组件设置
+
+执行`resetStoreVM`方法，进行store组件的初始化。
 
 ```js
 // initialize the store vm, which is responsible for the reactivity
@@ -1376,30 +1383,54 @@ handler在这里就是传入的checkout函数，其执行需要的commit以及st
 resetStoreVM(this, state)
 ```
 
+综合前面的分析可以了解到，Vuex其实构建的就是一个名为store的vm组件，所有配置的state、actions、mutations以及getters都是其组件的属性，所有的操作都是对这个vm组件进行的。
+
+一起看下resetStoreVM方法的内部实现：
 ```js
+// store.js
+
+/**
+ * 创建了当前store实例的_vm组件，至此store就创建完毕了
+ * @param {*} store store对象
+ * @param {*} state state对象
+ * @param {*} hot 
+ */
 function resetStoreVM (store, state, hot) {
-  // 保存旧vm
+  // 缓存前vm组件
   const oldVm = store._vm
 
   // bind store public getters
   store.getters = {}
+  // reset local getters cache
+  store._makeLocalGettersCache = Object.create(null)
   const wrappedGetters = store._wrappedGetters
   const computed = {}
-  // 循环所有getters，通过Object.defineProperty方法为getters对象建立属性，这样就可以通过this.$store.getters.xxx访问
+
+  // 循环所有处理过的getters，并新建computed对象进行存储，
+  // 通过Object.defineProperty方法为getters对象建立属性，
+  // 这样就可以通过this.$store.getters.xxxgetter访问到该getters
   forEachValue(wrappedGetters, (fn, key) => {
     // use computed to leverage its lazy-caching mechanism
+    // direct inline function use will lead to closure preserving oldVm.
+    // using partial to return function with only arguments preserved in closure environment.
     // getter保存在computed中，执行时只需要给上store参数，这个在registerGetter时已经做处理
-    computed[key] = () => fn(store)
+    computed[key] = partial(fn, store)
     Object.defineProperty(store.getters, key, {
       get: () => store._vm[key],
       enumerable: true // for local getters
     })
   })
 
+  // use a Vue instance to store the state tree
+  // suppress warnings just in case the user has added
+  // some funky global mixins
   // 使用一个vue实例来保存state和getter
   // silent设置为true，取消所有日志警告等
   const silent = Vue.config.silent
+
+  // 暂时将Vue设为静默模式，避免报出用户加载的某些插件触发的警告
   Vue.config.silent = true
+  // 设置新的storeVm，将当前初始化的state以及getters作为computed属性（刚刚遍历生成的）
   store._vm = new Vue({
     data: {
       $$state: state
@@ -1412,9 +1443,12 @@ function resetStoreVM (store, state, hot) {
   // enable strict mode for new vm
   // strict模式
   if (store.strict) {
+    // 该方法对state执行$watch以禁止从mutation外部修改state
     enableStrictMode(store)
   }
-  // 若存在oldVm而且是热更新，解除对state的引用，销毁oldVm
+
+  // 若存在oldVm，则不是初始化过程，那么执行的该方法，将旧的组件state设置为null，解除对state的引用。
+  // 强制更新所有监听者(watchers)，待更新生效，DOM更新完成后，执行vm组件的destroy方法进行销毁，减少内存的占用
   if (oldVm) {
     if (hot) {
       // dispatch changes in all subscribed watchers
@@ -1430,29 +1464,25 @@ function resetStoreVM (store, state, hot) {
 
 这里会重新设置一个新的vue实例，用来保存`state`和`getter`，`getters`保存在计算属性中，会给`getters`加一层代理，这样可以通过`this.$store.getters.xxx`访问到，而且在执行getters时只传入了`store`参数，这个在上面的`registerGetter`已经做了处理，也是为什么我们的`getters`可以拿到`state` `getters` `rootState` `rootGetters`的原因。然后根据用户设置开启`strict`模式，如果存在oldVm，解除对state的引用，等dom更新后把旧的vue实例销毁
 
+上面代码涉及到了严格模式的判断，看一下严格模式如何实现的：
+
 ```js
+/**
+ * 使用$watch来观察state的变化，如果此时的store._committing不会true，
+ * 便是在mutation之外修改state，报错。
+ * @param {*} store store对象
+ */
 function enableStrictMode (store) {
-  store._vm.$watch(
-    function () {
-      return this._data.$$state
-    },
-    () => {
-      if (process.env.NODE_ENV !== 'production') {
-        // 不允许在mutation之外修改state
-        assert(
-          store._committing,
-          `Do not mutate vuex store state outside mutation handlers.`
-        )
-      }
-    },
-    { deep: true, sync: true }
-  )
+  store._vm.$watch(function () { return this._data.$$state }, () => {
+    if (__DEV__) {
+      // 不允许在mutation之外修改state
+      assert(store._committing, `do not mutate vuex store state outside mutation handlers.`)
+    }
+  }, { deep: true, sync: true })
 }
 ```
 
-使用`$watch`来观察`state`的变化，如果此时的`store._committing`不会true，便是在`mutation`之外修改state，报错。
-
-再次回到构造函数，接下来是各类插件的注册
+使用`$watch`来观察`state`的变化，如果没有通过 this._withCommit() 方法进行state修改，则报错。
 
 
 

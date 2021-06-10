@@ -385,15 +385,13 @@ function resetStore (store, hot) {
 }
 
 /**
- * 将state和getters存放到一个vue实例中
- * getters保存在计算属性中，会给getters加一层代理，
- * 这样可以通过this.$store.getters.xxx访问到
- * @param {*} store 
- * @param {*} state 
+ * 创建了当前store实例的_vm组件，至此store就创建完毕了
+ * @param {*} store store对象
+ * @param {*} state state对象
  * @param {*} hot 
  */
 function resetStoreVM (store, state, hot) {
-  // 保存旧vm
+  // 缓存前vm组件
   const oldVm = store._vm
 
   // bind store public getters
@@ -402,7 +400,10 @@ function resetStoreVM (store, state, hot) {
   store._makeLocalGettersCache = Object.create(null)
   const wrappedGetters = store._wrappedGetters
   const computed = {}
-  // 循环所有getters，通过Object.defineProperty方法为getters对象建立属性，这样就可以通过this.$store.getters.xxx访问
+
+  // 循环所有处理过的getters，并新建computed对象进行存储，
+  // 通过Object.defineProperty方法为getters对象建立属性，
+  // 这样就可以通过this.$store.getters.xxxgetter访问到该getters
   forEachValue(wrappedGetters, (fn, key) => {
     // use computed to leverage its lazy-caching mechanism
     // direct inline function use will lead to closure preserving oldVm.
@@ -421,7 +422,10 @@ function resetStoreVM (store, state, hot) {
   // 使用一个vue实例来保存state和getter
   // silent设置为true，取消所有日志警告等
   const silent = Vue.config.silent
+
+  // 暂时将Vue设为静默模式，避免报出用户加载的某些插件触发的警告
   Vue.config.silent = true
+  // 设置新的storeVm，将当前初始化的state以及getters作为computed属性（刚刚遍历生成的）
   store._vm = new Vue({
     data: {
       $$state: state
@@ -434,10 +438,12 @@ function resetStoreVM (store, state, hot) {
   // enable strict mode for new vm
   // strict模式
   if (store.strict) {
+    // 该方法对state执行$watch以禁止从mutation外部修改state
     enableStrictMode(store)
   }
 
-  // 若存在oldVm，解除对state的引用，等dom更新后把旧的vue实例销毁
+  // 若存在oldVm，则不是初始化过程，那么执行的该方法，将旧的组件state设置为null，解除对state的引用。
+  // 强制更新所有监听者(watchers)，待更新生效，DOM更新完成后，执行vm组件的destroy方法进行销毁，减少内存的占用
   if (oldVm) {
     if (hot) {
       // dispatch changes in all subscribed watchers
