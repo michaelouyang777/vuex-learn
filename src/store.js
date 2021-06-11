@@ -110,6 +110,7 @@ export class Store {
     /************************
      * 插件注册
      ************************/
+    // 插件注册，所有插件都是一个函数，接受store作为参数
     plugins.forEach(plugin => plugin(this))
 
     // 如果开启devtools，注册devtool

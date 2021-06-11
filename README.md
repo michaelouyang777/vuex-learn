@@ -1366,13 +1366,6 @@ handler在这里就是传入的checkout函数，其执行需要的commit以及st
 
 
 
-
-
-
-
-
-
-
 ##### 2-6. store._vm组件设置
 
 执行`resetStoreVM`方法，进行store组件的初始化。
@@ -1488,12 +1481,48 @@ function enableStrictMode (store) {
 
 ##### 2-7. 插件注册
 
+Store构造函数的最后一步，执行plugin的注册。
+
+`Vuex`中可以传入`plguins`选项来安装各种插件，这些插件都是函数，接受`store`作为参数，`Vuex`中内置了`devtool`和`logger`两个插件：
+
 ```js
 // apply plugins
+// 插件注册，所有插件都是一个函数，接受store作为参数
 plugins.forEach(plugin => plugin(this))
 
-if (Vue.config.devtools) {
+// 如果开启devtools，注册devtool
+const useDevtools = options.devtools !== undefined ? options.devtools : Vue.config.devtools
+if (useDevtools) {
   devtoolPlugin(this)
+}
+```
+
+plugins提供的功能有：
+```js
+// plugins/devtool.js
+
+export default function devtoolPlugin (store) {
+  if (!devtoolHook) return
+
+  store._devtoolHook = devtoolHook
+
+  // 1. 触发Vuex组件初始化的hook
+  devtoolHook.emit('vuex:init', store)
+
+  // 2. 提供“时空穿梭”功能，即state操作的前进和倒退
+  devtoolHook.on('vuex:travel-to-state', targetState => {
+    store.replaceState(targetState)
+  })
+
+  // 3. 订阅mutation，当触发mutation时,触发vuex:mutation方法，并提供被触发的mutation函数和当前的state状态
+  store.subscribe((mutation, state) => {
+    devtoolHook.emit('vuex:mutation', mutation, state)
+  }, { prepend: true })
+
+  // 4. 订阅action，当触发action时,触发vuex:action方法，并提供被触发的action函数和当前的state状态
+  store.subscribeAction((action, state) => {
+    devtoolHook.emit('vuex:action', action, state)
+  }, { prepend: true })
 }
 ```
 
@@ -1501,47 +1530,19 @@ if (Vue.config.devtools) {
 
 ![store](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-store.jpg)
 
-看到这里，相信已经对`store`的一些实现细节有所了解，另外`store`上还存在一些api，但是用到的比较少，可以简单看看都有些啥
 
 
-##### 插件
 
-`Vuex`中可以传入`plguins`选项来安装各种插件，这些插件都是函数，接受`store`作为参数，`Vuex`中内置了`devtool`和`logger`两个插件，
-```js
-// 插件注册，所有插件都是一个函数，接受store作为参数
-plugins.forEach(plugin => plugin(this))
 
-// 如果开启devtools，注册devtool
-if (Vue.config.devtools) {
-  devtoolPlugin(this)
-}
-```
 
-```js
-// devtools.js
-const devtoolHook =
-  typeof window !== 'undefined' &&
-  window.__VUE_DEVTOOLS_GLOBAL_HOOK__
 
-export default function devtoolPlugin (store) {
-  if (!devtoolHook) return
 
-  store._devtoolHook = devtoolHook
 
-  // 触发vuex:init
-  devtoolHook.emit('vuex:init', store)
 
-  // 时空穿梭功能
-  devtoolHook.on('vuex:travel-to-state', targetState => {
-    store.replaceState(targetState)
-  })
 
-  // 订阅mutation，当触发mutation时触发vuex:mutation方法，传入mutation和state
-  store.subscribe((mutation, state) => {
-    devtoolHook.emit('vuex:mutation', mutation, state)
-  })
-}
-```
+
+
+
 
 
 #### 3. 其他api
