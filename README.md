@@ -1,14 +1,14 @@
-## vuex 源码学习
+# vuex 源码学习
 
 
 
-### vuex 研究版本
+## vuex 研究版本
 vuex v3.6.2
 
 
 
 
-### 目录结构
+## 目录结构
 
 vuex的主体目录结构如下：
 ~~~
@@ -58,7 +58,7 @@ vuex的主体目录结构如下：
 
 
 
-### 学习源码前的一些疑问
+## 学习源码前的一些疑问
 
 先将问题抛出来，使学习和研究更有针对性：
 1. 使用Vuex只需执行 Vue.use(Vuex)，并在Vue的配置中传入一个store对象的示例，store是如何实现注入的？
@@ -75,11 +75,11 @@ vuex的主体目录结构如下：
 
 
 
-### 源码分析
+## 源码分析
 
-#### 1. 初始化装载与注入
+### 1. 初始化装载与注入
 
-##### 1-1. 装载实例
+#### 1-1. 装载实例
 
 先从一个简单的示例入手，一步一步分析整个代码的执行过程，下面是一个简单示例：
 
@@ -110,7 +110,7 @@ new Vue({
 })
 ```
 
-##### 1-2. 装载分析
+#### 1-2. 装载分析
 
 Vue官方建议的插件使用方法是使用Vue.use()方法，这个方法会调用插件的install方法，将Vuex装载到Vue对象上。先看下Vue.use方法实现：
 
@@ -231,7 +231,7 @@ export default function (Vue) {
 
 
 
-#### 2.store初始化
+### 2.store初始化
 
 接下去继续看例子
 
@@ -375,7 +375,7 @@ export class Store {
 ```
 
 
-##### 2-1. 环境判断
+#### 2-1. 环境判断
 
 开始分析store的构造函数，分小节逐函数逐行的分析其功能。
 
@@ -422,7 +422,7 @@ export function assert (condition, msg) {
 
 
 
-##### 2-2. 数据初始化
+#### 2-2. 数据初始化
 
 环境判断后，初始化内部数据，并根据new Vuex.store(options) 时传入的options对象，收集modules。
 
@@ -459,7 +459,7 @@ this._makeLocalGettersCache = Object.create(null) // 用于保存本地getters�
 
 
 
-##### 2-3 .module树构造（模块收集）
+#### 2-3 .module树构造（模块收集）
 
 接下的是重点
 
@@ -566,7 +566,7 @@ export default class Module {
 
 
 
-##### 2-4. dispatch与commit设置（绑定commit和dispatch的this指针）
+#### 2-4. dispatch与commit设置（绑定commit和dispatch的this指针）
 
 继续回到store的构造函数代码。
 
@@ -715,7 +715,7 @@ commit方法和dispatch相比虽然都是触发type，但是对应的处理却�
 
 
 
-###### state修改方法
+##### state修改方法
 _withCommit是一个代理方法，所有触发mutation的进行state修改的操作都经过它，由此来统一管理监控state状态的修改。实现代码如下：
 ```js
 _withCommit (fn) {
@@ -737,7 +737,7 @@ _withCommit (fn) {
 
 
 
-##### 2-5. module模块安装
+#### 2-5. module模块安装
 
 module模块安装是store的核心部分。
 
@@ -846,7 +846,7 @@ function installModule (store, rootState, path, module, hot) {
 }
 ```
 
-###### 2-5-1. 初始化rootState
+##### 2-5-1. 初始化rootState
 
 `installModule`方法初始化组件树根组件、注册所有子组件，并将其中所有的getters存储到this._wrappedGetters属性中，看看其中的代码实现：
 ```js
@@ -897,7 +897,7 @@ function getNestedState (state, path) {
 ```
 
 
-###### 2-5-2. module上下文环境设置
+##### 2-5-2. module上下文环境设置
 
 命名空间和根目录条件判断完毕后，接下来定义 **local变量** 和 **module.context** 的值。执行`makeLocalContext`方法，**为该module设置局部的 dispatch、commit、getters和state**（由于namespace的存在需要做兼容处理）。
 
@@ -1020,7 +1020,7 @@ function getNestedState (state, path) {
 
 
 
-###### 2-5-3. mutations、actions、getters注册
+##### 2-5-3. mutations、actions、getters注册
 
 定义local环境后，循环注册我们在options中配置的 **action、mutation、getters** 等。逐个分析各注册函数之前，先看下模块间的逻辑关系流程图：
 ![vuex-flow](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-flow.jpg)
@@ -1227,7 +1227,7 @@ function registerGetter (store, type, rawGetter, local) {
 最后，`wrappedActionHandler` 比 `wrappedMutationHandler` 以及 `wrappedGetter` 多拿到dispatch和commit操作方法，因此action可以进行dispatch action和commit mutation操作。
 
 
-###### 2-5-4. 子module安装
+##### 2-5-4. 子module安装
 
 注册完了根组件的actions、mutations以及getters后，递归调用自身，为子组件注册其state，actions、mutations以及getters等。
 
@@ -1240,7 +1240,7 @@ module.forEachChild((child, key) => {
 
 
 
-###### 2-5-5. 实例结合
+##### 2-5-5. 实例结合
 
 前面介绍了dispatch和commit方法以及actions等的实现，下面结合一个官方的购物车实例中的部分代码来加深理解。
 
@@ -1366,7 +1366,7 @@ handler在这里就是传入的checkout函数，其执行需要的commit以及st
 
 
 
-##### 2-6. store._vm组件设置
+#### 2-6. store._vm组件设置
 
 执行`resetStoreVM`方法，进行store组件的初始化。
 
@@ -1479,7 +1479,7 @@ function enableStrictMode (store) {
 
 
 
-##### 2-7. 插件注册
+#### 2-7. 插件注册
 
 Store构造函数的最后一步，执行plugin的注册。
 
@@ -1533,19 +1533,7 @@ export default function devtoolPlugin (store) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-#### 3. 其他api
+### 3. 其他api
 
 - watch (getter, cb, options)
 
@@ -1667,11 +1655,11 @@ _withCommit (fn) {
 
 在执行`mutation`的时候，会将`_committing`设置为true，执行完毕后重置，在开启`strict`模式时，会监听`state`的变化，当变化时`_committing`不为true时会给出警告
 
-#### 4. 辅助函数
+### 4. 辅助函数
 
 为了避免每次都需要通过`this.$store`来调用api，`vuex`提供了`mapState` `mapMutations` `mapGetters` `mapActions` `createNamespacedHelpers` 等api，接着看看各api的具体实现，存放在`src/helpers.js`
 
-##### 4.1 一些工具函数
+#### 4-1. 一些工具函数
 
 下面这些工具函数是辅助函数内部会用到的，可以先看看功能和实现，主要做的工作是数据格式的统一、和通过`namespace`获取`module`
 
@@ -1722,7 +1710,7 @@ function getModuleByNamespace (store, helper, namespace) {
 }
 ```
 
-##### 4.2 mapState
+#### 4-2. mapState
 
 为组件创建计算属性以返回 `store` 中的状态
 
@@ -1784,7 +1772,7 @@ export default {
 }
 ```
 
-##### 4.3 mapGetters
+#### 4-3. mapGetters
 
 将`store` 中的 `getter` 映射到局部计算属性中
 
@@ -1813,7 +1801,7 @@ export const mapGetters = normalizeNamespace((namespace, getters) => {
 
 同样的处理方式，遍历`getters`，只是这里需要加上命名空间，这是因为在注册时`_wrapGetters`中的`getters`是有加上命名空间的
 
-##### 4.4 mapMutations
+#### 4-4. mapMutations
 
 创建组件方法提交 `mutation`
 
@@ -1844,7 +1832,7 @@ export const mapMutations = normalizeNamespace((namespace, mutations) => {
 
 和上面都是一样的处理方式，这里在判断是否存在`namespace`后，`commit`是不一样的，上面可以知道每个`module`都是保存了上下文的，这里如果存在`namespace`就需要使用那个另外处理的`commit`等信息，另外需要注意的是，这里不需要加上`namespace`，这是因为在`module.context.commit`中会进行处理，忘记的可以往上翻，看`makeLocalContext`对`commit`的处理
 
-##### 4.5 mapAction
+#### 4-5. mapAction
 
 创建组件方法分发 action
 
@@ -1873,3 +1861,93 @@ export const mapActions = normalizeNamespace((namespace, actions) => {
 
 和`mapMutations`基本一样的处理方式
 
+
+
+
+
+
+## 总结
+最后我们回过来看文章开始提出的几个问题
+
+1. 问：使用Vuex只需执行 Vue.use(Vuex)，并在Vue的配置中传入一个store对象的示例，store是如何实现注入的？
+   > 答：Vue.use(Vuex) 方法执行的是install方法，它实现了Vue实例对象的init方法封装和注入，使传入的store对象被设置到Vue上下文环境的$store中。因此在Vue Component任意地方都能够通过this.$store访问到该store。
+   ```js
+   export function install (_Vue) {
+     // 判断是否已经存在Vue对象，有则返回
+     if (Vue && _Vue === Vue) {
+       if (__DEV__) {
+         console.error(
+           '[vuex] already installed. Vue.use(Vuex) should be called only once.'
+         )
+       }
+       return
+     }
+     // 赋给全局的Vue变量
+     Vue = _Vue
+     // 执行引入mixin方法
+     applyMixin(Vue)
+   }
+   ```
+
+2. 问：state内部支持模块配置和模块嵌套，如何实现的？
+   > 答：在store构造方法中有`makeLocalContext`方法，所有module都会有一个local context，根据配置时的path进行匹配。所以执行如dispatch('submitOrder', payload)这类action时，默认的拿到都是module的local state，如果要访问最外层或者是其他module的state，只能从rootState按照path路径逐步进行访问。
+   ```js
+   // 设置module的上下文，绑定对应的dispatch、commit、getters、state
+   const local = module.context = makeLocalContext(store, namespace, path)  
+   ```
+
+3. 问：在执行dispatch触发action(commit同理)的时候，只需传入(type, payload)，action执行函数中第一个参数store从哪里获取的？
+   > 答：store初始化时，所有配置的action和mutation以及getters均被封装过。在执行如dispatch('submitOrder', payload)的时候，actions中type为submitOrder的所有处理方法都是被封装后的，其第一个参数为当前的store对象，所以能够获取到 { dispatch, commit, state, rootState } 等数据。
+   ```js
+   function registerAction (store, type, handler, local) {
+     // 取出对应type的actions-handler集合，如果没有则给个空数组
+     const entry = store._actions[type] || (store._actions[type] = [])
+     // 存储新的封装过的action-handler到数组中
+     entry.push(function wrappedActionHandler (payload) {
+       // 包一层，action执行时需要传入state等对象，以及payload
+       let res = handler.call(store, {
+         dispatch: local.dispatch,
+         commit: local.commit,
+         getters: local.getters,
+         state: local.state,
+         rootGetters: store.getters,
+         rootState: store.state
+       }, payload)
+       // 如果action的执行结果不是promise，将他包裹为promise，这样就支持promise的链式调用
+       if (!isPromise(res)) {
+         res = Promise.resolve(res)
+       }
+       if (store._devtoolHook) {
+         // 使用devtool处理一次error
+         return res.catch(err => {
+           store._devtoolHook.emit('vuex:error', err)
+           throw err
+         })
+       } else {
+         return res
+       }
+     })
+   }
+   ```
+
+4. 问：Vuex如何区分state是外部直接修改，还是通过mutation方法修改的？
+   > 答：Vuex中修改state的唯一渠道就是执行 commit('xx', payload) 方法，其底层通过执行 this._withCommit(fn) 设置_committing标志变量为true，然后才能修改state，修改完毕还需要还原_committing变量。外部修改虽然能够直接修改state，但是并没有修改_committing标志位，所以只要watch一下state，state change时判断是否_committing值为true，即可判断修改的合法性。
+   ```js
+    _withCommit (fn) {
+      // 在执行mutation的时候，会将_committing设置为true，执行完毕后重置
+      const committing = this._committing
+      this._committing = true
+      fn()
+      this._committing = committing
+    }
+   ```
+
+5. 问：调试时的”时空穿梭”功能是如何实现的？
+   > 答：devtoolPlugin中提供了此功能。因为dev模式下所有的state change都会被记录下来，’时空穿梭’ 功能其实就是将当前的state替换为记录中某个时刻的state状态，利用 store.replaceState(targetState) 方法将执行this._vm.state = state 实现。
+   ```js
+   devtoolHook.on('vuex:travel-to-state', targetState => {
+     store.replaceState(targetState)
+   })
+   ```
+
+源码中还有一些工具函数类似registerModule、unregisterModule、hotUpdate、watch以及subscribe等，如有兴趣可以打开源码看看，这里不再细述。
