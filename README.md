@@ -1,6 +1,9 @@
 # vuex 源码学习
 
 
+![vuex](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-logo.jpg)
+
+
 
 ## vuex 研究版本
 vuex v3.6.2
@@ -89,9 +92,10 @@ vuex的主体目录结构如下：
 
 import Vue from 'vue'
 import Vuex from 'vuex'
-
+// 1. 注册插件（如果是在浏览器环境运行的，可以不写该方法）
 Vue.use(Vuex)
 
+// 2. 创建store实例
 export default new Vuex.Store()
 ```
 
@@ -103,6 +107,7 @@ import Vue from 'vue'
 import App from './../pages/app.vue'
 import store from './store.js'
 
+// 3. 创建和挂载根实例
 new Vue({
   el: '#root',
   store, 
@@ -110,29 +115,64 @@ new Vue({
 })
 ```
 
-#### 1-2. 装载分析
 
-Vue官方建议的插件使用方法是使用Vue.use()方法，这个方法会调用插件的install方法，将Vuex装载到Vue对象上。先看下Vue.use方法实现：
 
+
+### 2. 初始化装载与注入详细分析
+
+#### 2-1. 装载分析
+
+Vue官方建议的插件使用方法是使用`Vue.use()`方法，这个方法会调用插件的install方法，将Vuex装载到Vue对象上。
+
+先看下`Vue.use()`方法实现：
 ```js
-function (plugin: Function | Object) {
-  /* istanbul ignore if */
-  if (plugin.installed) {
-    return
+// core/use.js
+
+export function initUse (Vue: GlobalAPI) {
+  // use方法接收一个Function或Object
+  // 并把use方法挂载到Vue上，成为类方法
+  Vue.use = function (plugin: Function | Object) {
+    const installedPlugins = (this._installedPlugins || (this._installedPlugins = []))
+    if (installedPlugins.indexOf(plugin) > -1) {
+      return this
+    }
+
+    // additional parameters
+    const args = toArray(arguments, 1)
+    args.unshift(this)
+    // 判断plugin中的install是否函数
+    if (typeof plugin.install === 'function') {
+      // 调用的install函数
+      plugin.install.apply(plugin, args)
+    } else if (typeof plugin === 'function') {
+      plugin.apply(null, args)
+    }
+    installedPlugins.push(plugin)
+    return this
   }
-  // additional parameters
-  const args = toArray(arguments, 1)
-  args.unshift(this)
-  if (typeof plugin.install === 'function') {
-    // 实际执行插件的install方法
-    plugin.install.apply(plugin, args)
-  } else {
-    plugin.apply(null, args)
-  }
-  plugin.installed = true
-  return this
 }
 ```
+
+`Vue.use(Vuex)`会自动加载Vuex中的install方法，那么Vuex又是怎么实现install方法的呢？
+```js
+// index.js
+// 引入Store类，和install方法
+import { Store, install } from './store'
+
+...
+
+// export一个对象（对象内包裹了install方法）
+export default {
+  Store,
+  install,
+  ...
+}
+
+```
+
+Vuex通过抛出一个对象，对象内包裹着install方法。那么`Vue.use()`的时候，use方法内部会调用`plugin.install.apply()`，也就调用执行了`Vuex.install`方法了。
+
+下面是Vuex的install方法的具体实现：
 
 store.js内定义局部 Vue 变量，用于判断是否已经装载和减少全局作用域查找。
 
@@ -195,8 +235,10 @@ export default function (Vue) {
   /**
    * Vuex init hook, injected into each instances init hooks list.
    * 
-   * 当我们在执行new Vue启动一个Vue应用程序时，需要给上store字段，
-   * 根组件从这里拿到store，子组件从父组件拿到，这样一层一层传递下去，
+   * 使用如何之后的这部分内容，要等到new Vue()实例化的时候，beforeCreate才会被执行。
+   * 当我们在执行new Vue启动一个Vue应用程序时，需要给上store字段，new Vue({ store })
+   * 根组件可以从this.$options拿到store，再把this.$options中的store挂载到this.$store上。
+   * 如果组件没有this.$options.store，说明是子组件，子组件从父组件拿到$store，这样一层一层传递下去，
    * 实现所有组件都有$store属性，这样我们就可以在任何组件中通过this.$store访问到store
    */
   function vuexInit () {
@@ -231,7 +273,7 @@ export default function (Vue) {
 
 
 
-### 2.store初始化
+#### 2-2. store初始化
 
 接下去继续看例子
 
@@ -375,7 +417,7 @@ export class Store {
 ```
 
 
-#### 2-1. 环境判断
+##### 2-1. 环境判断
 
 开始分析store的构造函数，分小节逐函数逐行的分析其功能。
 
@@ -422,7 +464,7 @@ export function assert (condition, msg) {
 
 
 
-#### 2-2. 数据初始化
+##### 2-2. 数据初始化
 
 环境判断后，初始化内部数据，并根据new Vuex.store(options) 时传入的options对象，收集modules。
 
@@ -459,7 +501,7 @@ this._makeLocalGettersCache = Object.create(null) // 用于保存本地getters�
 
 
 
-#### 2-3 .module树构造（模块收集）
+##### 2-3 .module树构造（模块收集）
 
 接下的是重点
 
@@ -566,7 +608,7 @@ export default class Module {
 
 
 
-#### 2-4. dispatch与commit设置（绑定commit和dispatch的this指针）
+##### 2-4. dispatch与commit设置（绑定commit和dispatch的this指针）
 
 继续回到store的构造函数代码。
 
@@ -715,7 +757,7 @@ commit方法和dispatch相比虽然都是触发type，但是对应的处理却�
 
 
 
-##### state修改方法
+###### state修改方法
 _withCommit是一个代理方法，所有触发mutation的进行state修改的操作都经过它，由此来统一管理监控state状态的修改。实现代码如下：
 ```js
 _withCommit (fn) {
@@ -737,7 +779,7 @@ _withCommit (fn) {
 
 
 
-#### 2-5. module模块安装
+##### 2-5. module模块安装
 
 module模块安装是store的核心部分。
 
@@ -846,7 +888,7 @@ function installModule (store, rootState, path, module, hot) {
 }
 ```
 
-##### 2-5-1. 初始化rootState
+###### 2-5-1. 初始化rootState
 
 `installModule`方法初始化组件树根组件、注册所有子组件，并将其中所有的getters存储到this._wrappedGetters属性中，看看其中的代码实现：
 ```js
@@ -897,7 +939,7 @@ function getNestedState (state, path) {
 ```
 
 
-##### 2-5-2. module上下文环境设置
+###### 2-5-2. module上下文环境设置
 
 命名空间和根目录条件判断完毕后，接下来定义 **local变量** 和 **module.context** 的值。执行`makeLocalContext`方法，**为该module设置局部的 dispatch、commit、getters和state**（由于namespace的存在需要做兼容处理）。
 
@@ -1020,7 +1062,7 @@ function getNestedState (state, path) {
 
 
 
-##### 2-5-3. mutations、actions、getters注册
+###### 2-5-3. mutations、actions、getters注册
 
 定义local环境后，循环注册我们在options中配置的 **action、mutation、getters** 等。逐个分析各注册函数之前，先看下模块间的逻辑关系流程图：
 ![vuex-flow](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-flow.jpg)
@@ -1227,7 +1269,7 @@ function registerGetter (store, type, rawGetter, local) {
 最后，`wrappedActionHandler` 比 `wrappedMutationHandler` 以及 `wrappedGetter` 多拿到dispatch和commit操作方法，因此action可以进行dispatch action和commit mutation操作。
 
 
-##### 2-5-4. 子module安装
+###### 2-5-4. 子module安装
 
 注册完了根组件的actions、mutations以及getters后，递归调用自身，为子组件注册其state，actions、mutations以及getters等。
 
@@ -1240,7 +1282,7 @@ module.forEachChild((child, key) => {
 
 
 
-##### 2-5-5. 实例结合
+###### 2-5-5. 实例结合
 
 前面介绍了dispatch和commit方法以及actions等的实现，下面结合一个官方的购物车实例中的部分代码来加深理解。
 
@@ -1366,7 +1408,7 @@ handler在这里就是传入的checkout函数，其执行需要的commit以及st
 
 
 
-#### 2-6. store._vm组件设置
+##### 2-6. store._vm组件设置
 
 执行`resetStoreVM`方法，进行store组件的初始化。
 
@@ -1479,7 +1521,7 @@ function enableStrictMode (store) {
 
 
 
-#### 2-7. 插件注册
+##### 2-7. 插件注册
 
 Store构造函数的最后一步，执行plugin的注册。
 
