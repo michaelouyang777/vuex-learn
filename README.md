@@ -4,7 +4,6 @@
 ![vuex](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-logo.jpg)
 
 
-
 ## vuex 研究版本
 vuex v3.6.2
 
@@ -604,7 +603,7 @@ export default class Module {
 5. 再判断当前module是否存在子module，递归遍历所有的module，并调用 `this.register(path.concat(key), rawChildModule, runtime)` 对module进行注册。
 6. 最终options对象被构造成一个完整的组件树。
 
-![ModuleCollection](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/module-collection.jpeg)
+![ModuleCollection](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/module-collection.jpg)
 
 
 
@@ -1380,26 +1379,26 @@ const actions = {
 Vue组件中点击购买执行当前module的dispatch方法，传入type值为 ‘checkout’，payload值为 ‘products’，在源码中dispatch方法在所有注册过的actions中查找’checkout’的对应执行数组，取出循环执行。执行的是被封装过的被命名为wrappedActionHandler的方法，真正传入的checkout的执行函数在wrappedActionHandler这个方法中被执行，源码如下（注：前面贴过，这里再看一次）：
 ```js
 function wrappedActionHandler (payload, cb) {
-    let res = handler({
-      dispatch: local.dispatch,
-      commit: local.commit,
-      getters: local.getters,
-      state: local.state,
-      rootGetters: store.getters,
-      rootState: store.state
-    }, payload, cb)
-    if (!isPromise(res)) {
-      res = Promise.resolve(res)
-    }
-    if (store._devtoolHook) {
-      return res.catch(err => {
-        store._devtoolHook.emit('vuex:error', err)
-        throw err
-      })
-    } else {
-      return res
-    }
+  let res = handler({
+    dispatch: local.dispatch,
+    commit: local.commit,
+    getters: local.getters,
+    state: local.state,
+    rootGetters: store.getters,
+    rootState: store.state
+  }, payload, cb)
+  if (!isPromise(res)) {
+    res = Promise.resolve(res)
   }
+  if (store._devtoolHook) {
+    return res.catch(err => {
+      store._devtoolHook.emit('vuex:error', err)
+      throw err
+    })
+  } else {
+    return res
+  }
+}
 ```
 
 handler在这里就是传入的checkout函数，其执行需要的commit以及state就是在这里被传入，payload也传入了，在实例中对应接收的参数名为products。commit的执行也是同理的，实例中checkout还进行了一次commit操作，提交一次type值为types.CHECKOUT_REQUEST的修改，因为mutation名字是唯一的，这里进行了常量形式的调用，防止命名重复，执行跟源码分析中一致，调用 function wrappedMutationHandler (payload) { handler(local.state, payload) } 封装函数来实际调用配置的mutation方法。
@@ -1637,7 +1636,7 @@ registerModule (path, rawModule, options = {}) {
   )
   // reset store to update getters...
   resetStoreVM(this, this.state)
-  }
+}
 ```
 
 首先统一`path`的格式为Array，接着是断言，path只接受`String`和`Array`类型，且不能注册根module，然后调用`store._modules.register`方法收集module，也就是上面的`module-collection`里面的方法。再调用`installModule`进行模块的安装，最后调用`resetStoreVM`更新`_vm`
