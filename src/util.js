@@ -55,10 +55,18 @@ export function forEachValue (obj, fn) {
   Object.keys(obj).forEach(key => fn(obj[key], key))
 }
 
+/**
+ * 判断是否对象
+ * @param {*} obj 
+ */
 export function isObject (obj) {
   return obj !== null && typeof obj === 'object'
 }
 
+/**
+ * 判断是否promise
+ * @param {*} val 
+ */
 export function isPromise (val) {
   return val && typeof val.then === 'function'
 }

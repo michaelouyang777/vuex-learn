@@ -1992,3 +1992,39 @@ export const mapActions = normalizeNamespace((namespace, actions) => {
    ```
 
 源码中还有一些工具函数类似registerModule、unregisterModule、hotUpdate、watch以及subscribe等，如有兴趣可以打开源码看看，这里不再细述。
+
+
+
+
+
+
+-----------------------------------------
+
+
+
+
+### 其他疑问
+
+* Vuex中的state如何做到响应式？
+  
+  答：是通过内部定义的Vue实例，实现响应式；
+
+
+* 命名空间是怎么实现的？
+  
+  答：命名空间是实现是通过namespaced后，使得state、actions、mutations、getters的key值具有命名空间的前缀，从而做到相互独立；访问时，需要通过声明命名空间前缀，才能匹配到对应的key值的实例或方法；关键逻辑在installModule时，构造的namespace前缀，并以此作为最终的key值，注册到Store的私有变量中；
+
+
+* Vuex的实例是怎么挂载到Vue中的？
+
+  答：是通过在vuexInit方法，将options参数中的Store实例，挂载到this.$store中；而vuexInit方法时通过Vue.use时，调用插件的install方法，通过Vue.mixin的方式，将改vuexInit挂载到Vue的声明周期中；
+
+
+* Vuex怎么实现从commit中更新state的约束？
+
+  答：是通过_commiting和_withCommit实现的；
+
+
+* 插件机制是什么实现的？
+
+  答：插件机制是通过Store的构造方法的最后，遍历调用plugins数组中的plugin方法，并且将Store实例作为参数传入plugin中，使得plugin内部可与操作store；

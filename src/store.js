@@ -409,8 +409,10 @@ function resetStoreVM (store, state, hot) {
     // use computed to leverage its lazy-caching mechanism
     // direct inline function use will lead to closure preserving oldVm.
     // using partial to return function with only arguments preserved in closure environment.
+    // 将getter作为computed的属性，使其具有lazy-caching机制
     // getter保存在computed中，执行时只需要给上store参数，这个在registerGetter时已经做处理
     computed[key] = partial(fn, store)
+    // 这里定义store中的getters，getters对应computed的属性，也即对应wrappedGetters
     Object.defineProperty(store.getters, key, {
       get: () => store._vm[key],
       enumerable: true // for local getters
@@ -426,6 +428,8 @@ function resetStoreVM (store, state, hot) {
 
   // 暂时将Vue设为静默模式，避免报出用户加载的某些插件触发的警告
   Vue.config.silent = true
+
+  // 这里实现state的响应式
   // 设置新的storeVm，将当前初始化的state以及getters作为computed属性（刚刚遍历生成的）
   store._vm = new Vue({
     data: {
