@@ -11,6 +11,10 @@ export default class ModuleCollection {
     this.register([], rawRootModule, false)
   }
 
+  /**
+   * 获取module
+   * @param {*} path 
+   */
   get (path) {
     // 根据path获取module
     return path.reduce((module, key) => {
@@ -18,6 +22,10 @@ export default class ModuleCollection {
     }, this.root)
   }
 
+  /**
+   * 获取namespace
+   * @param {*} path 
+   */
   getNamespace (path) {
     let module = this.root
     return path.reduce((namespace, key) => {
@@ -26,21 +34,29 @@ export default class ModuleCollection {
     }, '')
   }
 
+  /**
+   * 更新module
+   * @param {*} rawRootModule 
+   */
   update (rawRootModule) {
     update([], this.root, rawRootModule)
   }
 
-  /*
-   * 递归注册module path是路径 如
-   * {
-   *    modules: {
-   *      a: {
-   *        state: {}
+  /**
+   * 递归注册module
+   *   path是路径 如
+   *   {
+   *      modules: {
+   *        a: {
+   *          state: {}
+   *        }
    *      }
-   *    }
-   * }
-   * a模块的path => ['a']
-   * 根模块的path => []
+   *   }
+   *   a模块的path => ['a']
+   *   根模块的path => []
+   * @param {*} path 路径
+   * @param {*} rawModule 
+   * @param {*} runtime 
    */
   register (path, rawModule, runtime = true) {
     if (__DEV__) {
@@ -69,6 +85,10 @@ export default class ModuleCollection {
     }
   }
 
+  /**
+   * 注销某个module
+   * @param {*} path 路径
+   */
   unregister (path) {
     const parent = this.get(path.slice(0, -1))
     const key = path[path.length - 1]
@@ -92,8 +112,8 @@ export default class ModuleCollection {
   }
 
   /**
-   * 是否注册
-   * @param {*} path 
+   * 是否已经注册
+   * @param {*} path 路径
    */
   isRegistered (path) {
     const parent = this.get(path.slice(0, -1))
@@ -109,6 +129,12 @@ export default class ModuleCollection {
   }
 }
 
+/**
+ * 递归更新module
+ * @param {*} path 路径
+ * @param {*} targetModule 当前module
+ * @param {*} newModule 新module
+ */
 function update (path, targetModule, newModule) {
   if (__DEV__) {
     assertRawModule(path, newModule)
@@ -155,6 +181,11 @@ const assertTypes = {
   actions: objectAssert
 }
 
+/**
+ * 断言module
+ * @param {*} path 
+ * @param {*} rawModule 
+ */
 function assertRawModule (path, rawModule) {
   Object.keys(assertTypes).forEach(key => {
     if (!rawModule[key]) return
@@ -170,6 +201,14 @@ function assertRawModule (path, rawModule) {
   })
 }
 
+/**
+ * 组合断言信息
+ * @param {*} path 
+ * @param {*} key 
+ * @param {*} type 
+ * @param {*} value 
+ * @param {*} expected 
+ */
 function makeAssertionMessage (path, key, type, value, expected) {
   let buf = `${key} should be ${expected} but "${key}.${type}"`
   if (path.length > 0) {
