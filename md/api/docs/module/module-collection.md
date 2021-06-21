@@ -1,4 +1,8 @@
 * `ModuleCollection` 类
+
+  描述：
+
+  模块收集类，用于收集模块化开发的store。
  
   - `constructor` 构造函数
 

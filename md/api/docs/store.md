@@ -1,10 +1,10 @@
-* Store类
+* `Store` 类
 
   描述：
 
   store的构造类。
 
-  - constructor构造函数
+  - `constructor` 构造函数
 
     描述：
 
@@ -18,67 +18,71 @@
     7. 插件注册。
 
 
-  - get实例方法
+  - `get` 实例方法
 
     描述：
 
     获取state。
 
 
-  - set实例方法
+  - `set` 实例方法
+
+    描述：
+
+    此方法仅在开发vuex断言使用。
 
 
-  - commit实例方法
+  - `commit` 实例方法
 
     描述：
 
 
-  - dispatch实例方法
+  - `dispatch` 实例方法
 
     描述：
 
 
-  - subscribe实例方法
+  - `subscribe` 实例方法
 
     描述：
 
 
-  - subscribeAction实例方法
+  - `subscribeAction` 实例方法
 
     描述：
 
 
-  - watch实例方法
+  - `watch` 实例方法
 
     描述：
 
 
-  - replaceState实例方法
+  - `replaceState` 实例方法
 
     描述：
 
 
-  - registerModule实例方法
+  - `registerModule` 实例方法
 
     描述：
 
 
-  - unregisterModule实例方法
+  - `unregisterModule` 实例方法
 
     描述：
 
 
-  - hasModule实例方法
+  - `hasModule` 实例方法
 
     描述：
 
 
-  - hotUpdate实例方法
+  - `hotUpdate` 实例方法
 
     描述：
 
 
-  - _withCommit实例方法
+  - `_withCommit` 实例方法
 
     描述：
 
@@ -86,67 +90,67 @@
 
 
 
-* genericSubscribe方法
+* `genericSubscribe` 方法
 
   描述：
 
 
-* resetStore方法
+* `resetStore` 方法
 
   描述：
 
 
-* resetStoreVM方法
+* `resetStoreVM` 方法
 
   描述：
 
 
-* installModule方法
+* `installModule` 方法
 
   描述：
 
 
-* makeLocalContext方法
+* `makeLocalContext` 方法
 
   描述：
 
 
-* makeLocalGetters方法
+* `makeLocalGetters` 方法
 
   描述：
 
 
-* registerMutation方法
+* `registerMutation` 方法
 
   描述：
 
 
-* registerAction方法
+* `registerAction` 方法
 
   描述：
 
 
-* registerGetter方法
+* `registerGetter` 方法
 
   描述：
 
 
-* enableStrictMode方法
+* `enableStrictMode` 方法
 
   描述：
 
 
-* getNestedState方法
+* `getNestedState` 方法
 
   描述：
 
 
-* unifyObjectStyle方法
+* `unifyObjectStyle` 方法
 
   描述：
 
 
-* install方法
+* `install` 方法
 
   描述：
 

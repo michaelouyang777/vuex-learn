@@ -1,46 +1,46 @@
-1. find方法
+* `find` 方法
 
    描述：
 
    查找数组内的数据，并返回第一条。
 
   
-2. deepCopy方法
+* `deepCopy` 方法
 
    描述：
 
    深拷贝对象。
 
 
-3. forEachValue方法
+* `forEachValue` 方法
 
    描述：
 
    遍历对象。
 
 
-4. isObject方法
+* `isObject` 方法
 
    描述：
 
    判断是否对象。
 
 
-5. isPromise方法
+* `isPromise` 方法
 
    描述：
 
    判断是否promise。
 
 
-6. assert方法
+* `assert` 方法
 
    描述：
 
    判断是否存在对象，没有则抛出error。
 
 
-7. partial方法
+* `partial` 方法
 
    描述：
 
