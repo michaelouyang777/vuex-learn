@@ -120,16 +120,30 @@ export class Store {
     }
   }
 
+  /**
+   * 获取state
+   * @return state
+   */
   get state () {
     return this._vm._data.$$state
   }
 
+  /**
+   * 此set方法仅在开发vuex断言使用。
+   * @param {*} v
+   */
   set state (v) {
     if (__DEV__) {
       assert(false, `use store.replaceState() to explicit replace store state.`)
     }
   }
 
+  /**
+   * store实例用于提交给mutation的方法
+   * @param {*} _type 
+   * @param {*} _payload 
+   * @param {*} _options 
+   */
   commit (_type, _payload, _options) {
     // check object-style commit
     // 统一格式，因为支持对象风格和payload风格
@@ -171,6 +185,11 @@ export class Store {
     }
   }
 
+  /**
+   * store实例用于提交action的方法
+   * @param {*} _type 
+   * @param {*} _payload 
+   */
   dispatch (_type, _payload) {
     // check object-style dispatch
     // 统一格式
@@ -238,10 +257,21 @@ export class Store {
     })
   }
 
+  /**
+   * 订阅方法
+   * @param {*} fn 
+   * @param {*} options 
+   */
   subscribe (fn, options) {
     return genericSubscribe(fn, this._subscribers, options)
   }
 
+
+  /**
+   * 订阅action，用于监听action
+   * @param {*} fn 
+   * @param {*} options 
+   */
   subscribeAction (fn, options) {
     const subs = typeof fn === 'function' ? { before: fn } : fn
     return genericSubscribe(subs, this._actionSubscribers, options)
@@ -272,7 +302,7 @@ export class Store {
   }
 
   /**
-   * 用于动态注册module
+   * 动态注册module
    * @param {*} path path只接受String和Array类型
    * @param {*} rawModule 
    * @param {*} options 
@@ -319,7 +349,7 @@ export class Store {
   }
 
   /**
-   * 是否存在该module
+   * 判断是否存在该module
    * @param {*} path 
    */
   hasModule (path) {
@@ -333,6 +363,11 @@ export class Store {
     return this._modules.isRegistered(path)
   }
 
+
+  /**
+   * 热更新store
+   * @param {*} newOptions 
+   */
   hotUpdate (newOptions) {
     this._modules.update(newOptions)
     resetStore(this, true)
@@ -350,6 +385,12 @@ export class Store {
   }
 }
 
+/**
+ * 通用的订阅者方法
+ * @param {*} fn 
+ * @param {*} subs 
+ * @param {*} options 
+ */
 function genericSubscribe (fn, subs, options) {
   if (subs.indexOf(fn) < 0) {
     options && options.prepend
@@ -619,6 +660,11 @@ function makeLocalContext (store, namespace, path) {
   return local
 }
 
+/**
+ * 设置当前的getters，给getters添加一层代理，去掉命名空间
+ * @param {*} store 
+ * @param {*} namespace 
+ */
 function makeLocalGetters (store, namespace) {
   if (!store._makeLocalGettersCache[namespace]) {
     const gettersProxy = {}
@@ -732,8 +778,9 @@ function registerGetter (store, type, rawGetter, local) {
 }
 
 /**
- * 使用$watch来观察state的变化，如果此时的store._committing不会true，
- * 便是在mutation之外修改state，报错。
+ * 使用$watch来观察state的变化，
+ * 禁止从mutation外部修改state（用于strict模式下），
+ * 如果在mutation之外修改state，则报错。
  * @param {*} store store对象
  */
 function enableStrictMode (store) {
@@ -745,10 +792,22 @@ function enableStrictMode (store) {
   }, { deep: true, sync: true })
 }
 
+/**
+ * 获取嵌套的state
+ * @param {*} state 
+ * @param {*} path 
+ */
 function getNestedState (state, path) {
   return path.reduce((state, key) => state[key], state)
 }
 
+/**
+ * 配置参数处理
+ * 统一格式，因为支持payload风格和对象风格
+ * @param {*} type 
+ * @param {*} payload 
+ * @param {*} options 
+ */
 function unifyObjectStyle (type, payload, options) {
   if (isObject(type) && type.type) {
     options = payload
