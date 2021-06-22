@@ -2,6 +2,11 @@ import { forEachValue } from '../util'
 
 // Base data struct for store's module, package with some attribute and method
 export default class Module {
+  /**
+   * Module的构造函数
+   * @param {*} rawModule 传入的rawModule是options，即new Vuex.Store({state, mutations, actions, getters})的options
+   * @param {*} runtime 运行时
+   */
   constructor (rawModule, runtime) {
     // 初始化时runtime为false
     this.runtime = runtime

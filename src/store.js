@@ -99,7 +99,7 @@ export class Store {
 
 
     /************************
-     * 更新store
+     * _vm组件设置
      ************************/
     // initialize the store vm, which is responsible for the reactivity
     // (also registers _wrappedGetters as computed properties)
@@ -440,18 +440,19 @@ function resetStoreVM (store, state, hot) {
   store.getters = {}
   // reset local getters cache
   store._makeLocalGettersCache = Object.create(null)
+  
+  // 拿到getters
   const wrappedGetters = store._wrappedGetters
+  // 定义一个空对象，用于存放getters
   const computed = {}
 
-  // 循环所有处理过的getters，并新建computed对象进行存储，
-  // 通过Object.defineProperty方法为getters对象建立属性，
-  // 这样就可以通过this.$store.getters.xxxgetter访问到该getters
+  /*
+   * 循环所有处理过的getters，通过新建的computed对象进行存储。
+   * 通过Object.defineProperty方法为getters对象建立属性，
+   * 这样就可以通过this.$store.getters.xxxgetter访问到该getters
+   */
   forEachValue(wrappedGetters, (fn, key) => {
-    // use computed to leverage its lazy-caching mechanism
-    // direct inline function use will lead to closure preserving oldVm.
-    // using partial to return function with only arguments preserved in closure environment.
-    // 将getter作为computed的属性，使其具有lazy-caching机制
-    // getter保存在computed中，执行时只需要给上store参数，这个在registerGetter时已经做处理
+    // 将柯里化后的getter存入的computed对象中（通过partial柯里化后的getter具有lazy-caching延迟缓存机制）
     computed[key] = partial(fn, store)
     // 这里定义store中的getters，getters对应computed的属性，也即对应wrappedGetters
     Object.defineProperty(store.getters, key, {
@@ -460,24 +461,23 @@ function resetStoreVM (store, state, hot) {
     })
   })
 
-  // use a Vue instance to store the state tree
-  // suppress warnings just in case the user has added
-  // some funky global mixins
-  // 使用一个vue实例来保存state和getter
   // silent设置为true，取消所有日志警告等
   const silent = Vue.config.silent
 
   // 暂时将Vue设为静默模式，避免报出用户加载的某些插件触发的警告
   Vue.config.silent = true
 
-  // 这里实现state的响应式
-  // 设置新的storeVm，将当前初始化的state以及getters作为computed属性（刚刚遍历生成的）
+  /*
+   * 使用一个vue实例来保存state和getter（computed对象中存放的是getter）
+   * 利用vue实例来实现vuex的响应式。
+   */
   store._vm = new Vue({
     data: {
       $$state: state
     },
     computed
   })
+
   // 恢复用户的silent设置
   Vue.config.silent = silent
 

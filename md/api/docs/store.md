@@ -14,7 +14,7 @@
     3. moduel树构造；
     4. 将dispatch和commit方法的this指针绑定到store上，防止被修改；
     5. 组装module；
-    6. 更新store；
+    6. _vm组件设置；
     7. 插件注册。
 
 

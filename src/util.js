@@ -80,6 +80,12 @@ export function assert (condition, msg) {
   if (!condition) throw new Error(`[vuex] ${msg}`)
 }
 
+/**
+ * 传入一个函数和参数，再用一个函数将它们封装起来，返回一个新的而无需传参的函数。
+ * 使用的是柯里化函数缓存了参数。
+ * @param {*} fn 
+ * @param {*} arg 
+ */
 export function partial (fn, arg) {
   return function () {
     return fn(arg)

@@ -416,7 +416,7 @@ export class Store {
 ```
 
 
-##### 2-1. 环境判断
+##### 2-2-1. 环境判断
 
 开始分析store的构造函数，分小节逐函数逐行的分析其功能。
 
@@ -463,7 +463,7 @@ export function assert (condition, msg) {
 
 
 
-##### 2-2. 数据初始化
+##### 2-2-2. 数据初始化
 
 环境判断后，初始化内部数据，并根据new Vuex.store(options) 时传入的options对象，收集modules。
 
@@ -500,7 +500,7 @@ this._makeLocalGettersCache = Object.create(null) // 用于保存本地getters�
 
 
 
-##### 2-3 .module树构造（模块收集）
+##### 2-2-3 .module树构造（模块收集）
 
 接下的是重点
 
@@ -607,7 +607,7 @@ export default class Module {
 
 
 
-##### 2-4. dispatch与commit设置（绑定commit和dispatch的this指针）
+##### 2-2-4. dispatch与commit设置（绑定commit和dispatch的this指针）
 
 继续回到store的构造函数代码。
 
@@ -778,7 +778,7 @@ _withCommit (fn) {
 
 
 
-##### 2-5. module模块安装
+##### 2-2-5. module模块安装
 
 module模块安装是store的核心部分。
 
@@ -887,7 +887,7 @@ function installModule (store, rootState, path, module, hot) {
 }
 ```
 
-###### 2-5-1. 初始化rootState
+###### 2-2-5-1. 初始化rootState
 
 `installModule`方法初始化组件树根组件、注册所有子组件，并将其中所有的getters存储到this._wrappedGetters属性中，看看其中的代码实现：
 ```js
@@ -938,7 +938,7 @@ function getNestedState (state, path) {
 ```
 
 
-###### 2-5-2. module上下文环境设置
+###### 2-2-5-2. module上下文环境设置
 
 命名空间和根目录条件判断完毕后，接下来定义 **local变量** 和 **module.context** 的值。执行`makeLocalContext`方法，**为该module设置局部的 dispatch、commit、getters和state**（由于namespace的存在需要做兼容处理）。
 
@@ -1061,7 +1061,7 @@ function getNestedState (state, path) {
 
 
 
-###### 2-5-3. mutations、actions、getters注册
+###### 2-2-5-3. mutations、actions、getters注册
 
 定义local环境后，循环注册我们在options中配置的 **action、mutation、getters** 等。逐个分析各注册函数之前，先看下模块间的逻辑关系流程图：
 ![vuex-flow](https://raw.githubusercontent.com/michaelouyang777/vuex-learn/dev/md/imgs/vuex-flow.jpg)
@@ -1268,7 +1268,7 @@ function registerGetter (store, type, rawGetter, local) {
 最后，`wrappedActionHandler` 比 `wrappedMutationHandler` 以及 `wrappedGetter` 多拿到dispatch和commit操作方法，因此action可以进行dispatch action和commit mutation操作。
 
 
-###### 2-5-4. 子module安装
+###### 2-2-5-4. 子module安装
 
 注册完了根组件的actions、mutations以及getters后，递归调用自身，为子组件注册其state，actions、mutations以及getters等。
 
@@ -1281,7 +1281,7 @@ module.forEachChild((child, key) => {
 
 
 
-###### 2-5-5. 实例结合
+###### 2-2-5-5. 实例结合
 
 前面介绍了dispatch和commit方法以及actions等的实现，下面结合一个官方的购物车实例中的部分代码来加深理解。
 
@@ -1407,7 +1407,7 @@ handler在这里就是传入的checkout函数，其执行需要的commit以及st
 
 
 
-##### 2-6. store._vm组件设置
+##### 2-2-6. store._vm组件设置
 
 执行`resetStoreVM`方法，进行store组件的初始化。
 
@@ -1520,7 +1520,7 @@ function enableStrictMode (store) {
 
 
 
-##### 2-7. 插件注册
+##### 2-2-7. 插件注册
 
 Store构造函数的最后一步，执行plugin的注册。
 

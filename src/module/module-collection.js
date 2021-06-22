@@ -6,7 +6,11 @@ import { assert, forEachValue } from '../util'
  * 用于模块化开发
  */
 export default class ModuleCollection {
-  constructor (rawRootModule) {
+  /**
+   * ModuleCollection的构造函数
+   * @param {*} rawRootModule 传入的rawRootModule是options，即new Vuex.Store({state, mutations, actions, getters})的options
+   */
+  constructor(rawRootModule) {
     // 注册 root module (Vuex.Store options)
     this.register([], rawRootModule, false)
   }
@@ -15,7 +19,7 @@ export default class ModuleCollection {
    * 获取module
    * @param {*} path 
    */
-  get (path) {
+  get(path) {
     // 根据path获取module
     return path.reduce((module, key) => {
       return module.getChild(key)
@@ -26,7 +30,7 @@ export default class ModuleCollection {
    * 获取namespace
    * @param {*} path 
    */
-  getNamespace (path) {
+  getNamespace(path) {
     let module = this.root
     return path.reduce((namespace, key) => {
       module = module.getChild(key)
@@ -38,7 +42,7 @@ export default class ModuleCollection {
    * 更新module
    * @param {*} rawRootModule 
    */
-  update (rawRootModule) {
+  update(rawRootModule) {
     update([], this.root, rawRootModule)
   }
 
@@ -55,10 +59,10 @@ export default class ModuleCollection {
    *   a模块的path => ['a']
    *   根模块的path => []
    * @param {*} path 路径
-   * @param {*} rawModule 
-   * @param {*} runtime 
+   * @param {*} rawModule 传入的rawModule是options，即new Vuex.Store({state, mutations, actions, getters})的options
+   * @param {*} runtime runtime默认为true
    */
-  register (path, rawModule, runtime = true) {
+  register(path, rawModule, runtime = true) {
     if (__DEV__) {
       // 断言 rawModule中的getters、actions、mutations必须为指定的类型
       assertRawModule(path, rawModule)
@@ -89,7 +93,7 @@ export default class ModuleCollection {
    * 注销某个module
    * @param {*} path 路径
    */
-  unregister (path) {
+  unregister(path) {
     const parent = this.get(path.slice(0, -1))
     const key = path[path.length - 1]
     const child = parent.getChild(key)
@@ -115,7 +119,7 @@ export default class ModuleCollection {
    * 是否已经注册
    * @param {*} path 路径
    */
-  isRegistered (path) {
+  isRegistered(path) {
     const parent = this.get(path.slice(0, -1))
     const key = path[path.length - 1]
 
@@ -135,7 +139,7 @@ export default class ModuleCollection {
  * @param {*} targetModule 当前module
  * @param {*} newModule 新module
  */
-function update (path, targetModule, newModule) {
+function update(path, targetModule, newModule) {
   if (__DEV__) {
     assertRawModule(path, newModule)
   }
@@ -186,7 +190,7 @@ const assertTypes = {
  * @param {*} path 
  * @param {*} rawModule 
  */
-function assertRawModule (path, rawModule) {
+function assertRawModule(path, rawModule) {
   Object.keys(assertTypes).forEach(key => {
     if (!rawModule[key]) return
 
@@ -209,7 +213,7 @@ function assertRawModule (path, rawModule) {
  * @param {*} value 
  * @param {*} expected 
  */
-function makeAssertionMessage (path, key, type, value, expected) {
+function makeAssertionMessage(path, key, type, value, expected) {
   let buf = `${key} should be ${expected} but "${key}.${type}"`
   if (path.length > 0) {
     buf += ` in module "${path.join('.')}"`
